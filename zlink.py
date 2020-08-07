@@ -334,6 +334,7 @@ class Note():
             if (r.search(search_string) is True):
                 return True
 
+    # Change the order value of the current note.
     def updateorder(self, new_order):
         original_file = self.file
         self.order = new_order
@@ -429,7 +430,7 @@ def getstring(stdscr, prompt_string, maxlength=40):
     stdscr.refresh()
     input = stdscr.getstr(curses.LINES-1, len(prompt_string), maxlength).decode(encoding='utf-8')
     curses.noecho()
-    return input  #       ^^^^  reading input at next line  
+    return input
 
 # Split a string into a list of strings no more than <maxlength> long.
 def splitstringlen(string, maxlength):
@@ -465,7 +466,6 @@ def main(stdscr):
     if (args.filename is not None):
         note1 = Note(args.filename)
 
-				
     command = None
     link_note = None
     move = False
@@ -493,7 +493,6 @@ def main(stdscr):
                 if (i > (top + curses.LINES - 2 )): continue
                 f = files[i]
                 max_width = curses.COLS - 5
-                #print(f"i:{i} top:{top} selected:{selected} {f}\n")
                 if (i == selected):
                     stdscr.addstr(("{:" + str(max_width) + "." + str(max_width) + "s}\n").format(f), curses.A_REVERSE)
                 else:
@@ -680,11 +679,8 @@ def main(stdscr):
                 else:
                     note = Note(files[-1])
                     next_order = note.order + 1
-                # Create new note
-                # get date
                 today = datetime.datetime.now()
-                #TODO: Change this to just numbers, no dashes.  Add seconds?
-                date = today.strftime("%Y-%m-%d %H-%M")
+                date = today.strftime("%Y%m%d%H%M%S")
                 filename = "{:04d} - {} - {}.md".format(next_order, date, new_title)
                 new_note = Note(filename)
                 new_note.write()
@@ -773,40 +769,40 @@ parser.add_argument('--addlink', help = "add a link to ADDLINK to filename")
 parser.add_argument('--nobacklink', help = "when adding a link, don't create a backlink from filename to ADDLINK", action='store_true')
 parser.add_argument('--defrag', help = "update the zettelkasten files to remove any gaps between entries", action='store_true')
 args = parser.parse_args()
-if (args.filename is not None):
-	note1 = Note(args.filename)
 
-if (args.addlink is not None and note1 is not None):
-	note2 = Note(args.addlink)
-	note1.addnotelink(note2)
-	note1.write()
-	stdscr.addstr(f"Added link {note2.title} to {note1.title}\n")
-	if (args.nobacklink is False):
-		note2.addnotebacklink(note1)
-		note2.write()
-		stdscr.addstr(f"Added backlink {note1.title} to {note2.title}\n")
-	sys.exit()
+if (args.addlink is not None and args.filename is not None):
+    # Don't look at anything, just create a link from one file to another.
+    note1 = Notes(args.filename)
+    note2 = Note(args.addlink)
+    note1.addnotelink(note2)
+    note1.write()
+    stdscr.addstr(f"Added link {note2.title} to {note1.title}\n")
+    if (args.nobacklink is False):
+        note2.addnotebacklink(note1)
+        note2.write()
+        stdscr.addstr(f"Added backlink {note1.title} to {note2.title}\n")
+    sys.exit()
 elif (args.defrag is True):
-	# Make this fix all the files so that there are no duplicate orders
-	#  and no holes
-	files = loadfiles()
-	for i in range(0, len(files)):
-		note = None
-		try:
-			note = Note(files[i])
-		except:
-			raise Exception(f"Can't open '{files[i]}'")
+    # Make this fix all the files so that there are no duplicate orders
+    #  and no holes
+    files = loadfiles()
+    for i in range(0, len(files)):
+        note = None
+        try:
+            note = Note(files[i])
+        except:
+            raise Exception(f"Can't open '{files[i]}'")
 
-		if (note.order != i+1):
-			original_file = note.file
-			note.updateorder(i+1)
-			print(f"Moved {original_file} to {note.file}")
-			files[i] = note.file
-			
-			for f in files:
-				n = Note(f)
-				n.updatelinks(original_file, note.file)
-	sys.exit()
+        if (note.order != i+1):
+            original_file = note.file
+            note.updateorder(i+1)
+            print(f"Moved {original_file} to {note.file}")
+            files[i] = note.file
+
+            for f in files:
+                n = Note(f)
+                n.updatelinks(original_file, note.file)
+    sys.exit()
 
 
 curses.wrapper(main)
