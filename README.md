@@ -11,7 +11,7 @@ directory.
 positional arguments:
   filename
 
-optional arguments:
+optional arguments:  
   -h, --help         show this help message and exit
   --addlink ADDLINK  add a link to ADDLINK to filename
   --nobacklink       when adding a link, don't create a backlink from filename
