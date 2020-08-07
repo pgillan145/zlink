@@ -17,14 +17,14 @@ if ('EDITOR' not in os.environ):
 # Hitting escape bungs everything up for a second; this reduces the delay.
 os.environ.setdefault('ESCDELAY', '25')
 
-logging.basicConfig(level=logging.DEBUG, filename="/Users/pgillan/Documents/zlink.log")
+logging.basicConfig(level=logging.DEBUG, filename=f"{os.environ['HOME']}/zlink.log")
 logging.debug("-------")
 
-parser = argparse.ArgumentParser(description="Peruse and maintain a collection of Zettelkasten files.")
+parser = argparse.ArgumentParser(description="Peruse and maintain a collection of Zettelkasten files in the current directory.")
 parser.add_argument('filename', nargs="?")
 parser.add_argument('--addlink', help = "add a link to ADDLINK to filename")
 parser.add_argument('--nobacklink', help = "when adding a link, don't create a backlink from filename to ADDLINK", action='store_true')
-#parser.add_argument('--compress', help = "compress", action='store_true')
+parser.add_argument('--defrag', help = "update the zettelkasten files to remove any gaps between entries", action='store_true')
 args = parser.parse_args()
 
 #######
@@ -351,6 +351,7 @@ class Note():
         original_file = self.file
         self.order = new_order
         self.file = "{:04d} - {} - {}.md".format(self.order, self.id, self.title)
+        logging.debug(f"  moving {original_file} to {self.file}")
         os.rename(original_file, self.file)
 
     def updatetags(self, new_tags):
@@ -484,27 +485,7 @@ def main(stdscr):
     if (args.filename is not None):
         note1 = Note(args.filename)
 
-    if (args.addlink is not None and note1 is not None):
-        note2 = Note(args.addlink)
-        note1.addnotelink(note2)
-        note1.write()
-        stdscr.addstr(f"Added link {note2.title} to {note1.title}\n")
-        if (args.nobacklink is False):
-            note2.addnotebacklink(note1)
-            note2.write()
-            stdscr.addstr(f"Added backlink {note1.title} to {note2.title}\n")
-            return
-
-    #elif (args.compress is True):
-        # Make this fix all the files so that there are no duplicate orders
-        #  and no holes in them.
-        #files = loadfiles()
-        #i = 1
-        #for f in files:
-        #    note = Note(f)
-        #    if (note.order != i):
-        #pass
-
+				
     command = None
     link_note = None
     move = False
@@ -514,8 +495,17 @@ def main(stdscr):
     while (command != "q"):
         stdscr.clear()
 
+        status = ""
         if (note1 is not None):
             selected = note1.cursesoutput(stdscr, selected)
+            file_index = 0
+            try:
+                file_index = files.index(note1.file)
+            except:
+                note1 = None
+                selected = 0
+                continue
+            status = f"{file_index + 1} of {len(files)}"
         else:
             top = gettop(selected, top, len(files)-1)
             for i in range(0,len(files)):
@@ -528,8 +518,8 @@ def main(stdscr):
                     stdscr.addstr(("{:" + str(max_width) + "." + str(max_width) + "s}\n").format(f), curses.A_REVERSE)
                 else:
                     stdscr.addstr(("{:" + str(max_width) + "." + str(max_width) + "s}\n").format(f))
+            status = f"{selected+1} of {len(files)}"
 
-        status = f"{selected+1} of {len(files)}"
         if (move is True):
             status = f"{status} MOVING"
         if (link_note is not None):
@@ -783,6 +773,41 @@ def main(stdscr):
                 stdscr.addstr(curses.LINES-1,0,"Press any key to continue", curses.A_BOLD)
                 stdscr.refresh()
                 command = stdscr.getkey()
+
+if (args.filename is not None):
+	note1 = Note(args.filename)
+
+if (args.addlink is not None and note1 is not None):
+	note2 = Note(args.addlink)
+	note1.addnotelink(note2)
+	note1.write()
+	stdscr.addstr(f"Added link {note2.title} to {note1.title}\n")
+	if (args.nobacklink is False):
+		note2.addnotebacklink(note1)
+		note2.write()
+		stdscr.addstr(f"Added backlink {note1.title} to {note2.title}\n")
+	sys.exit()
+elif (args.defrag is True):
+	# Make this fix all the files so that there are no duplicate orders
+	#  and no holes
+	files = loadfiles()
+	for i in range(0, len(files)):
+		note = None
+		try:
+			note = Note(files[i])
+		except:
+			raise Exception(f"Can't open '{files[i]}'")
+
+		if (note.order != i+1):
+			original_file = note.file
+			note.updateorder(i+1)
+			print(f"Moved {original_file} to {note.file}")
+			files[i] = note.file
+			
+			for f in files:
+				n = Note(f)
+				n.updatelinks(original_file, note.file)
+	sys.exit()
 
 
 curses.wrapper(main)

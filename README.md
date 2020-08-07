@@ -2,9 +2,11 @@
 A command line script for navigating and editing Zettelkasten files.
 
 ## Usage
-zlink.py [-h] [--addlink ADDLINK] [--nobacklink] [filename]
+```
+usage: zlink.py [-h] [--addlink ADDLINK] [--nobacklink] [--defrag] [filename]
 
-Peruse and maintain a collection of Zettelkasten files.
+Peruse and maintain a collection of Zettelkasten files in the current
+directory.
 
 positional arguments:
   filename
@@ -14,3 +16,6 @@ optional arguments:
   --addlink ADDLINK  add a link to ADDLINK to filename
   --nobacklink       when adding a link, don't create a backlink from filename
                      to ADDLINK
+  --defrag           update the zettelkasten files to remove any gaps between
+                     entries
+```
