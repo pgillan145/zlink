@@ -3,7 +3,6 @@
 import argparse
 import curses
 import datetime
-import logging
 import os
 import os.path
 import re
@@ -16,16 +15,6 @@ if ('EDITOR' not in os.environ):
 
 # Hitting escape bungs everything up for a second; this reduces the delay.
 os.environ.setdefault('ESCDELAY', '25')
-
-logging.basicConfig(level=logging.DEBUG, filename=f"{os.environ['HOME']}/zlink.log")
-logging.debug("-------")
-
-parser = argparse.ArgumentParser(description="Peruse and maintain a collection of Zettelkasten files in the current directory.")
-parser.add_argument('filename', nargs="?")
-parser.add_argument('--addlink', help = "add a link to ADDLINK to filename")
-parser.add_argument('--nobacklink', help = "when adding a link, don't create a backlink from filename to ADDLINK", action='store_true')
-parser.add_argument('--defrag', help = "update the zettelkasten files to remove any gaps between entries", action='store_true')
-args = parser.parse_args()
 
 #######
 # CLASSES
@@ -181,8 +170,6 @@ class Note():
         for i in range(0, len(output)):
             s = output[i]
  
-            #logging.debug(f"{i}:{top}:{curses.LINES}:{s}")
-
             attr = 0
             if (re.match("^__REVERSE__", output[i])):
                 s = s.replace("__REVERSE__", "")
@@ -351,7 +338,6 @@ class Note():
         original_file = self.file
         self.order = new_order
         self.file = "{:04d} - {} - {}.md".format(self.order, self.id, self.title)
-        logging.debug(f"  moving {original_file} to {self.file}")
         os.rename(original_file, self.file)
 
     def updatetags(self, new_tags):
@@ -401,8 +387,6 @@ class Note():
 # Get the next available open slot in a given list of files after the 
 #   given position.
 def gethole(files, position=0):
-    logging.debug(f"gethole(positon={position})")
-
     if (len(files) == 0):
         next_order = 1
     elif (position < len(files)-1):
@@ -416,7 +400,6 @@ def gethole(files, position=0):
     else:
          note = Note(files[-1])
          next_order = note.order + 1
-    logging.debug(f"  next_order={next_order}")
     return next_order
 
 # Return the item at the 'top' of the screen, based on what is currently selected.
@@ -456,17 +439,14 @@ def splitstringlen(string, maxlength):
     return newstrings
 
 def swapnotes(files, original_pos, new_pos):
-    logging.debug(f"swapnotes(original_pos={original_pos},new_pos={new_pos})")
     n1 = Note(files[original_pos])
     n1_file = n1.file
 
     n2 = Note(files[new_pos])
     n2_file = n2.file
-    logging.debug(f"  n1={n1.order},n2={n2.order}")
     new_order = n1.order
     if (n2.order == n1.order and new_pos < original_pos):
         new_order = gethole(files, new_pos)
-    logging.debug(f"  new_order={new_order}")
     n1.updateorder(n2.order)
     n2.updateorder(new_order)
     files = loadfiles()
@@ -528,14 +508,18 @@ def main(stdscr):
         #    status = f"{status} {command}"
 
         if (status is not None):
+            # Make sure a long status doesn't push 
+            status = splitstringlen(status, curses.COLS-4)[0]
             stdscr.addstr(curses.LINES-1,0,status, curses.A_BOLD)
         stdscr.refresh()
         command = stdscr.getkey()
 
         if (note1 is not None):
             if (command == "KEY_DC" or command == ""):
-                note1.deletelink(selected)
-                note1.write()
+                confirm = getstring(stdscr, "Are you sure you want to delete this link? (y/N):", 1)
+                if (confirm == "y"):
+                    note1.deletelink(selected)
+                    note1.write()
             elif (command == "KEY_DOWN"):
                 selected += 1
                 if (selected > note1.linkcount()):
@@ -617,6 +601,7 @@ def main(stdscr):
                 stdscr.addstr("e            - open this note in the external editor (set the EDITOR environment variable)\n")
                 stdscr.addstr("l            - press once to set this note as the target.  Navigate to another note and press\n")
                 stdscr.addstr("               'l' again to add a link to the first note from the second note.\n")
+                stdscr.addstr("q            - quit\n")
                 stdscr.addstr("r            - rename note\n")
                 stdscr.addstr("t            - edit tags\n")
                 stdscr.addstr("\n")
@@ -626,7 +611,7 @@ def main(stdscr):
                 stdscr.addstr("<left>       - previous note\n")
                 stdscr.addstr("<right>      - next note\n")
                 stdscr.addstr("<esc>        - return to note list\n")
-                stdscr.addstr("?    - this help screen\n")
+                stdscr.addstr("?            - this help screen\n")
 
                 stdscr.addstr(curses.LINES-1,0,"Press any key to continue", curses.A_BOLD)
                 stdscr.refresh()
@@ -698,6 +683,7 @@ def main(stdscr):
                 # Create new note
                 # get date
                 today = datetime.datetime.now()
+                #TODO: Change this to just numbers, no dashes.  Add seconds?
                 date = today.strftime("%Y-%m-%d %H-%M")
                 filename = "{:04d} - {} - {}.md".format(next_order, date, new_title)
                 new_note = Note(filename)
@@ -708,11 +694,13 @@ def main(stdscr):
                 move = False
                 note = Note(files[selected])
                 original_file = note.file
-                note.delete()
-                files = loadfiles()
-                for f in files:
-                    note = Note(f)
-                    note.updatelinks(original_file, None)
+                confirm = getstring(stdscr, "Are you sure you want to delete this note? (y/N):", 1)
+                if (confirm == "y"):
+                    note.delete()
+                    files = loadfiles()
+                    for f in files:
+                        note = Note(f)
+                        note.updatelinks(original_file, None)
             elif (command == "m"):
                 if (move is True):
                     move = False
@@ -756,7 +744,7 @@ def main(stdscr):
                 stdscr.addstr("d or <del>       - delete the currently selected note\n")
                 stdscr.addstr("m                - change to 'move' mode.  <up>/<down> will move the selected note. <esc> to cancel\n")
                 stdscr.addstr("q                - quit\n")
-                stdscr.addstr("/                - enter a string to seach for\n")
+                stdscr.addstr("/                - enter a string to search for\n")
                 stdscr.addstr("?                - this help screen\n")
 
                 stdscr.addstr("\n")
@@ -774,6 +762,17 @@ def main(stdscr):
                 stdscr.refresh()
                 command = stdscr.getkey()
 
+
+#######
+# START
+#######
+
+parser = argparse.ArgumentParser(description="Peruse and maintain a collection of Zettelkasten files in the current directory.")
+parser.add_argument('filename', nargs="?")
+parser.add_argument('--addlink', help = "add a link to ADDLINK to filename")
+parser.add_argument('--nobacklink', help = "when adding a link, don't create a backlink from filename to ADDLINK", action='store_true')
+parser.add_argument('--defrag', help = "update the zettelkasten files to remove any gaps between entries", action='store_true')
+args = parser.parse_args()
 if (args.filename is not None):
 	note1 = Note(args.filename)
 
