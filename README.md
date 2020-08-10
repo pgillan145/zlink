@@ -3,7 +3,7 @@ A command line script for navigating and editing Zettelkasten files.
 
 ## Usage
 ```
-usage: zlink.py [-h] [--addlink ADDLINK] [--nobacklink] [--defrag] [filename]
+usage: zlink [-h] [--addlink ADDLINK] [--nobacklink] [--defrag] [filename]
 
 Peruse and maintain a collection of Zettelkasten files in the current
 directory.
