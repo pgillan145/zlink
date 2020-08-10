@@ -3,6 +3,7 @@
 import argparse
 import curses
 import datetime
+import minorimpact
 import os
 import os.path
 import re
@@ -120,7 +121,7 @@ class Note():
         if (len(self.tags) > 0 or self.id is not None): 
             output.append("")
         for i in self.default:
-            foo = splitstringlen(i,curses.COLS - 2)
+            foo = minorimpact.splitstringlen(i,curses.COLS - 2)
             for f in foo:
                 output.append(f"{f}")
         output.append("")
@@ -165,7 +166,7 @@ class Note():
                 output.append(f"{i.link}")
 
             if (i.text is not None):
-                foo = splitstringlen(i.text,curses.COLS - 4)
+                foo = minorimpact.splitstringlen(i.text,curses.COLS - 4)
                 for f in foo:
                     output.append(f"> {f}")
             output.append("")
@@ -435,13 +436,6 @@ def getstring(stdscr, prompt_string, maxlength=40):
     curses.noecho()
     return input
 
-# Split a string into a list of strings no more than <maxlength> long.
-def splitstringlen(string, maxlength):
-    newstrings = []
-    for i in range(0, len(string), maxlength):
-        newstrings.append(string[i:i+maxlength])
-    return newstrings
-
 def swapnotes(files, original_pos, new_pos):
     n1 = Note(files[original_pos])
     n1_file = n1.file
@@ -511,7 +505,7 @@ def main(stdscr):
 
         if (status is not None):
             # Make sure a long status doesn't push 
-            status = splitstringlen(status, curses.COLS-4)[0]
+            status = minorimpact.splitstringlen(status, curses.COLS-4)[0]
             stdscr.addstr(curses.LINES-1,0,status, curses.A_BOLD)
         stdscr.refresh()
         command = stdscr.getkey()
