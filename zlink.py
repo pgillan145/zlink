@@ -22,9 +22,12 @@ os.environ.setdefault('ESCDELAY', '25')
 
 # A text and a url.
 class Link():
-    def __init__(self, text, url):
-        self.text = text
+    def __init__(self, url, text=None):
         self.url = url
+        if (text is None):
+            self.text = url
+        else:
+            self.text = text
 
     def __str__(self):
         return f"[{self.text}]({self.url})"
@@ -98,11 +101,11 @@ class Note():
             self.links.append(link)
 
     def addnotebacklink(self, note):
-        l = Link(note.title, note.file)
+        l = Link(note.file, note.title)
         self.addbacklink(l)
 
     def addnotelink(self, note):
-        l = Link(note.title, note.file)
+        l = Link(note.file, note.title)
         self.addlink(l)
 
     def cursesoutput(self, stdscr, selected = 0, top = 0):
@@ -276,7 +279,7 @@ class Note():
         for l in self.parsed[section]:
             m = re.search("\[(.+)\]\((.+)\)", l)
             if (m):
-                data.append(Link(m.group(1),m.group(2)))
+                data.append(Link(m.group(2),m.group(1)))
         return data
 
     def parsereferences(self, section="references"):
@@ -295,7 +298,7 @@ class Note():
 
             m = re.search("\[(.+)\]\((.+)\)", l)
             if (m):
-                link = Link(m.group(1), m.group(2))
+                link = Link(m.group(2), m.group(1))
             m = re.search("^> (.+)$", l)
             if (m):
                 text = m.group(1)
@@ -680,7 +683,7 @@ def main(stdscr):
                     note = Note(files[-1])
                     next_order = note.order + 1
                 today = datetime.datetime.now()
-                date = today.strftime("%Y%m%d%H%M%S")
+                date = today.strftime("%Y-%m-%d %H-%M")
                 filename = "{:04d} - {} - {}.md".format(next_order, date, new_title)
                 new_note = Note(filename)
                 new_note.write()
