@@ -8,7 +8,7 @@ setup(
     description='Commandline zettelkasten browser, editor.',
     author='Patrick Gillan',
     license='GPLv3',
-    install_requires=[],
-    setup_requires=["minorimpact"],
+    install_requires=["minorimpact","pyperclip"],
+    setup_requires=[],
     tests_require=[],
 )
