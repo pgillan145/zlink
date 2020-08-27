@@ -22,9 +22,49 @@ os.environ.setdefault('ESCDELAY', '25')
 # CLASSES
 #######
 
+class File():
+    def __init__(self, file):
+        self.file = file
+
+    def view(self, stdscr):
+        newfile = None
+        return newfile
+
+    def cursesoutput(self, stdscr, top = 0):
+        output = []
+        output.append(f"__BOLD__{self.file}")
+        lines = []
+        try:
+            with open(self.file, "r") as f:
+                lines = [line.rstrip() for line in f]
+        except FileNotFoundError:
+            pass
+        for l in lines:
+            output.append(f"{l}")
+
+        for i in range(0, len(output)):
+            s = output[i]
+ 
+            attr = 0
+            if (re.match("^__REVERSE__", output[i])):
+                s = s.replace("__REVERSE__", "")
+                attr = curses.A_REVERSE
+            elif (re.match("^__BOLD__", output[i])):
+                s = s.replace("__BOLD__", "")
+                attr = curses.A_BOLD
+
+            if (i < top): continue
+            if (i >= top + curses.LINES - 2): continue
+
+            s = s[:curses.COLS-1]
+            stdscr.addstr(f"{s}\n", attr)
+
+        return
+
 class FileBrowser():
     def __init__(self, stdscr):
-        files = loadfiles(".")
+        cwd = os.getcwd()
+        files = loadfiles(cwd)
         command = None
 
         select = False
@@ -43,15 +83,15 @@ class FileBrowser():
 
             status = ""
             if (file is not None):
-                selected = file.cursesoutput(stdscr, selected)
+                file.cursesoutput(stdscr)
                 file_index = 0
                 try:
-                    file_index = files.index(file)
+                    file_index = files.index(file.file)
                 except:
                     file = None
                     selected = 0
                     continue
-                status = f"{file_index + 1} of {len(files)}"
+                status = f"{file_index} of {len(files)}"
             else:
                 top = gettop(selected, top, len(files)-1)
                 for i in range(0,len(files)):
@@ -133,11 +173,12 @@ class FileBrowser():
                     if (selected < 0):
                         selected = len(files)-1
                 elif (command == "\n"):
-                    file = files[selected]
-                    if (os.path.isdir(files[selected])):
-                        files = loadfiles(files[selected])
+                    f = files[selected]
+                    if (os.path.isdir(f)):
+                        cwd = os.path.normpath(os.path.join(cwd, f))
+                        files = loadfiles(cwd)
                     else:
-                        file = files[selected]
+                        file = File(f)
 
                     selected = 0
                     top = 0
@@ -510,10 +551,161 @@ class Note():
                     i.text = new_note.title
         self.write()
         
+    def view(stdscr):
+        newnote = None
+        return newnote
+
     def write(self):
         with open(self.file, "w") as f:
             f.write(self.__str__())
             f.close()
+
+class NoteBrowser():
+    def __init__(self, stdscr):
+            if (command == "KEY_DOWN" or command == "KEY_RIGHT"):
+                original_selected = selected
+                selected += 1
+                if (selected > len(files)-1):
+                    selected = 0
+                if (move is True):
+                    files = swapnotes(files, original_selected, selected)
+            elif (command == "KEY_UP" or command == "KEY_LEFT"):
+                original_selected = selected
+                selected -= 1
+                if (selected < 0):
+                    selected = len(files)-1
+                if (move is True):
+                    files = swapnotes(files, original_selected,selected)
+            elif (command == "KEY_END" or command == "G"):
+                move = False
+                selected = len(files) - 1
+            elif (command == "KEY_HOME"):
+                move = False
+                selected = 0
+            elif (command == "KEY_NPAGE" or command == ""):
+                move = False
+                selected += curses.LINES - 2  
+                if (selected > len(files)-1):
+                    selected = len(files)-1
+            elif (command == "KEY_PPAGE" or command == ""):
+                move = False
+                selected -= curses.LINES - 2
+                if (selected < 0):
+                    selected = 0
+            elif (command == "a"):
+                move = False
+                new_title = getstring(stdscr, "New Note: ", 80)
+                if (new_title == ""):
+                    return
+                # based on the selected note, figure out how many notes we have to adjust to make a hole
+                if (len(files) == 0):
+                    next_order = 1
+                elif (selected < len(files)-1):
+                    note = Note(files[selected+1])
+                    next_order = note.order + 1
+                    for f in files[selected:]:
+                        n = Note(f)
+                        if (n.order > next_order):
+                            break
+                        next_order = n.order + 1
+
+                    # now that we have the first free spot, move everything up one
+                    tmp_files = files[selected+1:]
+                    tmp_files.reverse()
+                    for f in tmp_files:
+                        n = Note(f)
+                        if (n.order < next_order):
+                            original_file = n.file
+                            n.updateorder(next_order)
+                            files = loadnotes()
+                            for f2 in files:
+                                n2 = Note(f2)
+                                n2.updatelinks(original_file, n.file)
+                            next_order -= 1
+                else:
+                    note = Note(files[-1])
+                    next_order = note.order + 1
+                today = datetime.datetime.now()
+                date = today.strftime("%Y-%m-%d %H-%M")
+                filename = "{:04d} - {} - {}.md".format(next_order, date, new_title)
+                new_note = Note(filename)
+                new_note.write()
+                files = loadnotes()
+                note1 = new_note
+            elif (command == "KEY_DC" or command == "d"):
+                move = False
+                note = Note(files[selected])
+                original_file = note.file
+                confirm = getstring(stdscr, "Are you sure you want to delete this note? (y/N):", 1)
+                if (confirm == "y"):
+                    note.delete()
+                    files = loadnotes()
+                    for f in files:
+                        note = Note(f)
+                        note.updatelinks(original_file, None)
+            elif (command == "f"):
+                file = FileBrowser(stdscr)
+            elif (command == "m"):
+                if (move is True):
+                    move = False
+                else:
+                    move = True
+            elif (command == "/"):
+                original_selected = selected
+                move = False
+                new_search = getstring(stdscr, "Search for: ")
+                if (new_search != ""):
+                    search = new_search
+                if (search == ""):
+                    return
+                search = search.lower()
+                for f in files[selected+1:]:
+                    n = Note(f)
+                    if (n.search(search)):
+                        selected = files.index(f)
+                        break
+
+                if (selected != original_selected):
+                    return
+
+                for f in files[:selected]:
+                    n = Note(f)
+                    if (n.search(search)):
+                        selected = files.index(f)
+                        break
+            elif (command == "\n"):
+                move = False
+                note1 = Note(files[selected])
+                selected = 0
+                top = 0
+            elif (command == ""):
+                move = False
+                link_note = None
+            elif (command == "?"):
+                stdscr.clear()
+                stdscr.addstr("Editing Commands\n", curses.A_BOLD)
+                stdscr.addstr("a                - add a new note after the selected note\n")
+                stdscr.addstr("d or <del>       - delete the currently selected note\n")
+                stdscr.addstr("m                - change to 'move' mode.  <up>/<down> will move the selected note. <esc> to cancel\n")
+                stdscr.addstr("q                - quit\n")
+                stdscr.addstr("/                - enter a string to search for\n")
+                stdscr.addstr("?                - this help screen\n")
+
+                stdscr.addstr("\n")
+                stdscr.addstr("Navigation Commands\n", curses.A_BOLD)
+                stdscr.addstr("<home>           - first note\n")
+                stdscr.addstr("<up>             - previous/next note\n")
+                stdscr.addstr("<pgup> or ^u     - move the curser up one screen\n")
+                stdscr.addstr("<pgdown> or ^d   - move the curser up one screen\n")
+                stdscr.addstr("<down>           - next note\n")
+                stdscr.addstr("<end> or G       - last note\n")
+                stdscr.addstr("<enter>          - open the selected note\n")
+                stdscr.addstr("<esc>            - cancel 'move' mode, link mode")
+
+                stdscr.addstr(curses.LINES-1,0,"Press any key to continue", curses.A_BOLD)
+                stdscr.refresh()
+                command = stdscr.getkey()
+
 
 #######
 # FUNCTIONS
@@ -673,7 +865,7 @@ def main(stdscr):
 
         status = ""
         if (note1 is not None):
-            selected = note1.cursesoutput(stdscr, selected)
+            selected = note1.cursesoutput(stdscr, top)
             file_index = 0
             try:
                 file_index = files.index(note1.file)
@@ -695,16 +887,10 @@ def main(stdscr):
                     stdscr.addstr(("{:" + str(max_width) + "." + str(max_width) + "s}\n").format(f))
             status = f"{selected+1} of {len(files)}"
 
-        if (move is True):
-            status = f"{status} MOVING"
-        elif (status is True and mark_x is not None):
+        if (status is True and mark_x is not None):
             status = f"{status} SELECTING2"
         elif (select is True):
             status = f"{status} SELECTING1"
-        if (link_note is not None):
-            status = f"{status} LINKING {link_note.title}"
-        #if (command is not None and command is not "\n"):
-        #    status = f"{status} {command}"
 
         if (status is not None):
             # Make sure a long status doesn't push 
