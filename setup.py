@@ -4,7 +4,7 @@ setup(
     name='zlink',
     packages=find_packages(),
     scripts=['zlink'],
-    version='0.0.1',
+    version='0.0.2',
     description='Commandline zettelkasten browser, editor.',
     author='Patrick Gillan',
     license='GPLv3',
