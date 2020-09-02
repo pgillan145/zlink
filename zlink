@@ -1,0 +1,315 @@
+#!/usr/bin/env python3
+
+import argparse
+import curses
+import datetime
+import logging
+import minorimpact
+import os
+import os.path
+import pyperclip
+import re
+import subprocess
+import sys
+
+import globalvars
+import zlinklib
+
+def main(stdscr):
+    # I like 'vi', so that's the default editor.
+    if ('EDITOR' not in os.environ):
+        os.environ.setdefault('EDITOR', 'vi')
+
+
+    logging.basicConfig(level=logging.DEBUG, filename="./zlink.log")
+    logging.debug("-------")
+
+    parser = argparse.ArgumentParser(description="Peruse and maintain a collection of Zettelkasten files in the current directory.")
+    parser.add_argument('filename', nargs="?")
+    parser.add_argument('--addlink', help = "add a link to ADDLINK to filename")
+    parser.add_argument('--nobacklink', help = "when adding a link, don't create a backlink from filename to ADDLINK", action='store_true')
+    parser.add_argument('--defrag', help = "update the zettelkasten files to remove any gaps between entries", action='store_true')
+    args = parser.parse_args()
+
+    #globalvars.vars['copy'] = None
+
+    if (args.addlink is not None and args.filename is not None):
+        # Don't look at anything, just create a link from one file to another.
+        note1 = zlinklib.Notes(args.filename)
+        note2 = zlinklib.Note(args.addlink)
+        note1.addnotelink(note2)
+        note1.write()
+        stdscr.addstr(f"Added link {note2.title} to {note1.title}\n")
+        if (args.nobacklink is False):
+            note2.addnotebacklink(note1)
+            note2.write()
+            stdscr.addstr(f"Added backlink {note1.title} to {note2.title}\n")
+        sys.exit()
+    elif (args.defrag is True):
+        # Make this fix all the files so that there are no duplicate orders
+        #  and no holes
+        files = zlinklib.loadnotes()
+        for i in range(0, len(files)):
+            note = None
+            try:
+                note = zlinklib.Note(files[i])
+            except:
+                raise Exception(f"Can't open '{files[i]}'")
+
+            if (note.order != i+1):
+                original_file = note.filename
+                note.updateorder(i+1)
+                print(f"Moved {original_file} to {note.filename}")
+                files[i] = note.filename
+
+                for f in files:
+                    n = zlinklib.Note(f)
+                    n.updatelinks(original_file, note.filename)
+        sys.exit()
+
+    # Start browsing
+    stdscr.clear()
+
+    files = zlinklib.loadnotes()
+    note1 = None
+    if (args.filename is not None):
+        note1 = zlinklib.Note(args.filename)
+
+    command = None
+
+    move = False
+    select = False
+
+    copy = None
+    link_note = None
+    mark_y = None
+    mark_x = None
+    search = ""
+    select_y = 0
+    select_x = 0
+    selected = 0
+    top = 0
+
+    while (command != "q"):
+        stdscr.clear()
+
+        status = ""
+        if (note1 is not None):
+            logging.debug(f"viewing {note1.title}")
+            newnote = note1.view(stdscr)
+            if (globalvars.reload):
+                files = zlinklib.loadnotes()
+                selected = 0
+                try:
+                    selected = files.index(note1.filename)
+                except:
+                    pass
+                globalvars.reload = False
+            #selected = note1.cursesoutput(stdscr, top=top, selected=selected)
+            if (newnote):
+                logging.debug(f"newnote {newnote}")
+                if (newnote == "PREV"):
+                    selected -= 1
+                    if (selected < 0):
+                        selected = len(files) - 1
+                    note1 = zlinklib.Note(files[selected])
+                elif (newnote == "NEXT"):
+                    selected += 1
+                    if (selected >= len(files)):
+                        selected = 0
+                    note1 = zlinklib.Note(files[selected])
+                else:
+
+                     try:
+                        note1 = zlinklib.Note(newnote)
+                        logging.debug(f"switching to {note1.title}")
+                        selected = files.index(note1.filename)
+                     except Exception as e:
+                        logging.debug(f"FUCKED:{e}")
+                        selected = 0
+                        note1 = None
+                continue
+            logging.debug("returned")
+            note1 = None
+            continue
+            #status = f"{file_index + 1} of {len(files)}"
+        else:
+            top = zlinklib.gettop(selected, top, len(files)-1)
+            for i in range(0,len(files)):
+                if (i < top): continue
+                if (i > (top + curses.LINES - 2 )): continue
+                f = files[i]
+                max_width = curses.COLS - 2
+                if (i == selected):
+                    stdscr.addstr(("{:" + str(max_width) + "." + str(max_width) + "s}\n").format(f), curses.A_REVERSE)
+                else:
+                    stdscr.addstr(("{:" + str(max_width) + "." + str(max_width) + "s}\n").format(f))
+            status = f"{selected+1} of {len(files)}"
+
+        if (status is True and mark_x is not None):
+            status = f"{status} SELECTING2"
+        elif (select is True):
+            status = f"{status} SELECTING1"
+
+        if (status):
+            # Make sure a long status doesn't push 
+            status = minorimpact.splitstringlen(status, curses.COLS-2)[0]
+            stdscr.addstr(curses.LINES-1,0,status, curses.A_BOLD)
+
+        stdscr.refresh()
+        command = stdscr.getkey()
+
+        if (command == "KEY_DOWN" or command == "KEY_RIGHT"):
+            original_selected = selected
+            selected += 1
+            if (selected > len(files)-1):
+                selected = 0
+            if (move is True):
+                files = swapnotes(files, original_selected, selected)
+        elif (command == "KEY_UP" or command == "KEY_LEFT"):
+            original_selected = selected
+            selected -= 1
+            if (selected < 0):
+                selected = len(files)-1
+            if (move is True):
+                files = swapnotes(files, original_selected,selected)
+        elif (command == "KEY_END" or command == "G"):
+            move = False
+            selected = len(files) - 1
+        elif (command == "KEY_HOME"):
+            move = False
+            selected = 0
+        elif (command == "KEY_NPAGE" or command == ""):
+            move = False
+            selected += curses.LINES - 2  
+            if (selected > len(files)-1):
+                selected = len(files)-1
+        elif (command == "KEY_PPAGE" or command == ""):
+            move = False
+            selected -= curses.LINES - 2
+            if (selected < 0):
+                selected = 0
+        elif (command == "a"):
+            move = False
+            new_title = getstring(stdscr, "New Note: ", 80)
+            if (new_title == ""):
+                continue
+            # based on the selected note, figure out how many notes we have to adjust to make a hole
+            if (len(files) == 0):
+                next_order = 1
+            elif (selected < len(files)-1):
+                note = zlinklib.Note(files[selected+1])
+                next_order = note.order + 1
+                for f in files[selected:]:
+                    n = zlinklib.Note(f)
+                    if (n.order > next_order):
+                        break
+                    next_order = n.order + 1
+
+                # now that we have the first free spot, move everything up one
+                tmp_files = files[selected+1:]
+                tmp_files.reverse()
+                for f in tmp_files:
+                    n = zlinklib.Note(f)
+                    if (n.order < next_order):
+                        original_file = n.filename
+                        n.updateorder(next_order)
+                        files = zlinklib.loadnotes()
+                        for f2 in files:
+                            n2 = zlinklib.Note(f2)
+                            n2.updatelinks(original_file, n.filename)
+                        next_order -= 1
+            else:
+                note = zlinklib.Note(files[-1])
+                next_order = note.order + 1
+            today = datetime.datetime.now()
+            date = today.strftime("%Y-%m-%d %H-%M")
+            filename = "{:04d} - {} - {}.md".format(next_order, date, new_title)
+            new_note = zlinklib.Note(filename)
+            new_note.write()
+            files = zlinklib.loadnotes()
+            note1 = new_note
+        elif (command == "KEY_DC" or command == "d"):
+            move = False
+            note = zlinklib.Note(files[selected])
+            original_file = note.filename
+            confirm = zlinklib.getstring(stdscr, "Are you sure you want to delete this note? (y/N):", 1)
+            if (confirm == "y"):
+                note.delete()
+                files = zlinklib.loadnotes()
+                for f in files:
+                    note = zlinklib.Note(f)
+                    note.updatelinks(original_file, None)
+        elif (command == "f"):
+            f = zlinklib.FileBrowser()
+            copy = f.browse(stdscr)
+        elif (command == "m"):
+            if (move is True):
+                move = False
+            else:
+                move = True
+        elif (command == "/"):
+            original_selected = selected
+            move = False
+            new_search = getstring(stdscr, "Search for: ")
+            if (new_search != ""):
+                search = new_search
+            if (search == ""):
+                continue
+            search = search.lower()
+            for f in files[selected+1:]:
+                n = zlinklib.Note(f)
+                if (n.search(search)):
+                    selected = files.index(f)
+                    break
+
+            if (selected != original_selected):
+                continue
+
+            for f in files[:selected]:
+                n = zlinklib.Note(f)
+                if (n.search(search)):
+                    selected = files.index(f)
+                    break
+        elif (command == "\n"):
+            move = False
+            logging.debug(f"opening {files[selected]}")
+            note1 = zlinklib.Note(files[selected])
+            #selected = 0
+            #top = 0
+        elif (command == ""):
+            move = False
+            link_note = None
+        elif (command == "?"):
+            stdscr.clear()
+            stdscr.addstr("Editing Commands\n", curses.A_BOLD)
+            stdscr.addstr("a                - add a new note after the selected note\n")
+            stdscr.addstr("d or <del>       - delete the currently selected note\n")
+            stdscr.addstr("m                - change to 'move' mode.  <up>/<down> will move the selected note. <esc> to cancel\n")
+            stdscr.addstr("q                - quit\n")
+            stdscr.addstr("/                - enter a string to search for\n")
+            stdscr.addstr("?                - this help screen\n")
+
+            stdscr.addstr("\n")
+            stdscr.addstr("Navigation Commands\n", curses.A_BOLD)
+            stdscr.addstr("<home>           - first note\n")
+            stdscr.addstr("<up>             - previous/next note\n")
+            stdscr.addstr("<pgup> or ^u     - move the curser up one screen\n")
+            stdscr.addstr("<pgdown> or ^d   - move the curser up one screen\n")
+            stdscr.addstr("<down>           - next note\n")
+            stdscr.addstr("<end> or G       - last note\n")
+            stdscr.addstr("<enter>          - open the selected note\n")
+            stdscr.addstr("<esc>            - cancel 'move' mode, link mode")
+
+            stdscr.addstr(curses.LINES-1,0,"Press any key to continue", curses.A_BOLD)
+            stdscr.refresh()
+            command = stdscr.getkey()
+
+#######
+# START
+#######
+
+if __name__ == "__main__":
+    # Hitting escape bungs everything up for a second; this reduces the delay.
+    os.environ.setdefault('ESCDELAY', '15')
+    curses.wrapper(main)
