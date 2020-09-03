@@ -1,14 +1,18 @@
 from setuptools import find_packages, setup
 
 setup(
-    name='zlink',
-    packages=find_packages(),
-    scripts=['zlink'],
-    version='0.0.2',
-    description='Commandline zettelkasten browser, editor.',
-    author='Patrick Gillan',
-    license='GPLv3',
-    install_requires=["minorimpact","pyperclip"],
-    setup_requires=[],
-    tests_require=[],
+    author = 'Patrick Gillan',
+    author_email = "pgillan@minorimpact.com",
+    description = 'Command line zettelkasten browser/editor.',
+    entry_points = { "console_scripts": [ "zlink = zlink.zlink:main" ] },
+    install_requires = ["minorimpact"],
+    license = 'GPLv3',
+    name = 'zlink',
+    packages = find_packages(),
+    py_modules = ["zlink"],
+    #scripts=['zlink'],
+    setup_requires = [],
+    tests_require = [],
+    url = "https://github.com/pgillan145/zlink",
+    version = '0.0.3'
 )

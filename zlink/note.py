@@ -10,358 +10,30 @@ import re
 import subprocess
 import sys
 
-import globalvars
+import zlink
+import zlink.globalvars
 
-#######
-# CLASSES
-#######
+from zlink.file import FileBrowser, File
 
 class InvalidNoteException(Exception):
     def __init__(self, message):
         super().__init__(message)
 
-class File():
-    def __init__(self, filename):
-        self.filename = filename
-        self.data = []
-        if (re.search("^\/", filename) is None):
-            filename = os.path.abspath(self.filename)
-
-        self.filename = filename
-        with open(self.filename, "r") as f:
-            for line in f:
-                line = line.rstrip()
-                self.data.append(line)
-
-    def cursesoutput(self, stdscr, top = 0):
-        stdscr.clear()
-        output = []
-        output.append(f"__BOLD__{self.filename}")
-        for l in self.data:
-            if (len(l) > 0):
-                for i in minorimpact.splitstringlen(l, curses.COLS-2):
-                    output.append(i)
-            else:
-                output.append(l)
-
-        for i in range(0, len(output)):
-            if (i < top): continue
-            if (i >= (top + curses.LINES - 2 )): continue
-
-            s = output[i]
-            attr = 0
-            if (re.match("^__REVERSE__", s)):
-                s = s.replace("__REVERSE__", "")
-                attr = curses.A_REVERSE
-            elif (re.match("^__BOLD__", s)):
-                s = s.replace("__BOLD__", "")
-                attr = curses.A_BOLD
-
-            s = s[:curses.COLS-1]
-            stdscr.addstr(f"{s}\n", attr)
-
-        return
-
-    def lines(self, width=0):
-        output = []
-        for l in self.data:
-            if (width > 0 and len(l)>0):
-                for i in minorimpact.splitstringlen(l, width):
-                    output.append(i)
-            else:
-                output.append(l)
-        return len(output)
-
-    def view(self, stdscr):
-        command = None
-
-        select = False
-        file = None
-
-        mark_y = None
-        mark_x = None
-        search = ""
-        select_y = 0
-        select_x = 0
-        selected = 0
-        top = 0
-        while (True):
-            stdscr.clear()
-
-            # TODO: Add some kind of header that stays resident at the top of the screen.
-            self.cursesoutput(stdscr, top)
-            # TODO: Add some kind of header that stays resident at the top of the screen.
-
-            status = ""
-            if (select is True and mark_x is not None):
-                status = f"{status} SELECTING2"
-            elif (select is True):
-                status = f"{status} SELECTING1"
-
-            if (len(status) > 0):
-                # Make sure a long status doesn't push
-                status = minorimpact.splitstringlen(status, curses.COLS-2)[0]
-                stdscr.addstr(curses.LINES-1,0,status, curses.A_BOLD)
-
-            if (select is True):
-                #c = stdscr.inch(select_y, select_x)
-                #stdscr.insch(select_y, select_x, c, curses.A_REVERSE)
-                highlight(stdscr, select_y, select_x, mark_y, mark_x)
-
-            stdscr.refresh()
-            command = stdscr.getkey()
-
-            if (command == "q"):
-                sys.exit()
-
-            if (command == "KEY_DOWN"):
-                if (select is True):
-                    if (mark_y is not None):
-                        if (mark_y < curses.LINES-2):
-                            mark_y += 1
-                    else:
-                        if (select_y < curses.LINES-2):
-                            select_y += 1
-                    continue
-
-                if (top < (self.lines(curses.COLS-2) - curses.LINES + 2)):
-                    top += 1
-            elif (command == "KEY_LEFT"):
-                if (select is True):
-                    if (mark_x is not None):
-                        if (mark_x > 0):
-                            mark_x -= 1
-                    else:
-                        if (select_x > 0):
-                            select_x -= 1
-                    continue
-                return "PREV"
-            elif (command == "KEY_RIGHT"):
-                if (select is True):
-                    if (mark_x is not None):
-                        if (mark_x < curses.COLS-2):
-                            mark_x += 1
-                    else:
-                        if (select_x < curses.COLS-2):
-                            select_x += 1
-                    continue
-                return "NEXT"
-            elif (command == "KEY_UP"):
-                if (select is True):
-                    if (mark_y is not None):
-                        if (mark_y > 0):
-                            mark_y -= 1
-                    else:
-                        if (select_y > 0):
-                            select_y -= 1
-                    continue
-                if (top > 0):
-                    top -= 1
-            elif (command == "c"):
-                # select text
-                if (select is False):
-                    select = True
-                    select_y = 0
-                    select_x = 0
-                    mark_y = None
-                    mark_x = None
-                else:
-                    mark_y = select_y
-                    mark_x = select_x
-            elif (command == "?"):
-                stdscr.clear()
-                stdscr.addstr("Editing Commands\n\n", curses.A_BOLD)
-                stdscr.addstr(" c              - enter selection mode to copy text to save the clipboard as a reference\n")
-                stdscr.addstr(" q              - quit\n")
-                stdscr.addstr(" ?              - this help screen\n")
-                stdscr.addstr("\n")
-                stdscr.addstr("Selection Mode Commands\n\n", curses.A_BOLD)
-                stdscr.addstr(" Use the arrow keys to move the cursor to the start of the text you want to select.  Press\n")
-                stdscr.addstr(" <enter> to start highlighting; use the arrow keys to move the cursor to the end of the text\n")
-                stdscr.addstr(" you want to select.  Press <enter> again to copy the text to the clipboard, along with a link\n")
-                stdscr.addstr(" to this note\n")
-                stdscr.addstr("\n")
-				# TODO: Add pgup/pgdn/etc
-                stdscr.addstr("Navigation Commands\n\n", curses.A_BOLD)
-                stdscr.addstr(" f              - open the file browser\n")
-                stdscr.addstr(" <up>/<down>    - scroll through this file\n")
-                stdscr.addstr(" <left>         - previous file\n")
-                stdscr.addstr(" <right>        - next file\n")
-                stdscr.addstr(" <esc>          - return to the previous page\n")
-
-                stdscr.addstr(curses.LINES-1,0,"Press any key to continue", curses.A_BOLD)
-                stdscr.refresh()
-                command = stdscr.getkey()
-            elif (command == "\n"):
-                if (select):
-                    if (mark_x is not None):
-                        text = highlight(stdscr, select_y, select_x, mark_y, mark_x)
-                        link = Link(self.filename)
-                        globalvars.copy = Reference(link, text)
-                        #pyperclip.copy(copy.__str__())
-                        select = False
-                        select_y = 0
-                        select_x = 0
-                        mark_y = None
-                        mark_x = None
-                        #return copy
-                    else:
-                        mark_y = select_y
-                        mark_x = select_x
-            elif (command == ''):
-                if (select is True):
-                    if (mark_x is not None):
-                        mark_x = None
-                        mark_y = None
-                    else:
-                        select = False
-                    continue
-                return
-        return 
-
-class FileBrowser():
-    def browse(self, stdscr, filename=None):
-        cwd = os.getcwd()
-        command = None
-        file = None
-
-        if (filename is not None):
-            if (re.search("^\/", filename)):
-                cwd = os.path.dirname(filename)
-            else:
-                filename = os.path.normpath(os.path.join(cwd, filename))
-            try:
-                file = File(filename)
-            except:
-                file = None
-
-        files = loadfiles(cwd)
-
-        search = ""
-        selected = 0
-        top = 0
-        while (command != ""):
-            stdscr.clear()
-
-            status = ""
-            if (file is not None):
-                newfile = file.view(stdscr)
-                if (newfile is not None):
-                    file = None
-                    newselected = selected
-                    while (file is None):
-                        if (newfile == "PREV"):
-                            newselected -= 1
-                            if (newselected < 0):
-                                newselected = len(files) - 1
-                        elif (newfile == "NEXT"):
-                            newselected += 1
-                            if (newselected > len(files) - 1):
-                                newselected = 0
-                        elif (isinstance(newfile, Reference)):
-                            return newfile
-                        else:
-                            break
-
-                        filename = os.path.join(cwd,files[newselected])
-                        if (os.path.isdir(filename) and newselected != selected):
-                            continue
-                        else:
-                            file = File(filename)
-                            selected = newselected
-                else:
-                    file = None
-                continue
-            else:
-                top = gettop(selected, top, len(files)-1)
-                for i in range(0,len(files)):
-                    if (i < top): continue
-                    if (i > (top + curses.LINES - 2 )): continue
-                    f = files[i]
-                    filename = os.path.normpath(os.path.join(cwd, f))
-                    if (os.path.isdir(filename)):
-                        f = f"{f}/"
-                    max_width = curses.COLS - 2
-                    if (i == selected):
-                        stdscr.addstr(("{:" + str(max_width) + "." + str(max_width) + "s}\n").format(f), curses.A_REVERSE)
-                    else:
-                        stdscr.addstr(("{:" + str(max_width) + "." + str(max_width) + "s}\n").format(f))
-                status = f"{selected+1} of {len(files)}"
-
-            if (len(status) > 0):
-                # Make sure a long status doesn't push
-                status = minorimpact.splitstringlen(status, curses.COLS-2)[0]
-                stdscr.addstr(curses.LINES-1,0,status, curses.A_BOLD)
-
-            stdscr.refresh()
-            command = stdscr.getkey()
-            if (command == "KEY_DOWN" or command == "KEY_RIGHT"):
-                selected += 1
-                if (selected > len(files)-1):
-                    selected = 0
-            elif (command == "KEY_UP" or command == "KEY_LEFT"):
-                selected -= 1
-                if (selected < 0):
-                    selected = len(files)-1
-            elif (command == "q"):
-                sys.exit()
-            elif (command == "?"):
-                stdscr.clear()
-                stdscr.addstr("\n")
-                stdscr.addstr("Commands\n\n", curses.A_BOLD)
-                # TODO: Add these navigation commands.
-                #stdscr.addstr("<home>           - first note\n")
-                #stdscr.addstr("<pgup> or ^u     - move the curser up one screen\n")
-                #stdscr.addstr("<pgdown> or ^d   - move the curser up one screen\n")
-                #stdscr.addstr("<end> or G       - last note\n")
-                stdscr.addstr(" <up>/<down>    - next/previous file\n")
-                stdscr.addstr(" <enter>        - open the selected file\n")
-                stdscr.addstr(" <esc>          - return to the previous screen list\n")
-                stdscr.addstr(" ?              - this help screen\n")
-
-                stdscr.addstr(curses.LINES-1,0,"Press any key to continue", curses.A_BOLD)
-                stdscr.refresh()
-                command = stdscr.getkey()
-            elif (command == "\n"):
-                f = files[selected]
-                filename = os.path.normpath(os.path.join(cwd,f))
-                if (os.path.isdir(filename)):
-                    cwd = filename
-                    files = loadfiles(cwd)
-                    selected = 0
-                else:
-                    file = File(filename)
-        
-# A text and a url.
 class Link():
     def __init__(self, url, text=None):
         self.url = url
         if (text is None):
-            self.text = url
-        else:
-            self.text = text
+            # TODO: Strip off the directory name and 
+            #if (re.search("^https?:", url)):
+            if (re.search("^\/", url)):
+                text = os.path.basename(url)
+            else:
+                text = url
+        self.text = text
 
     def __str__(self):
         return f"[{self.text}]({self.url})"
 
-# A link that also contains a bit of text for context.
-class Reference():
-    def __init__(self, link, text = None):
-        self.text = text
-        self.link = link
-
-    def __str__(self):
-        str = f"{self.link}"
-        if (self.text is not None):
-            str = str + f"\n> {self.text}"
-        return str
-
-    def search(self, search_string):
-        if (self.text is not None):
-            m = re.search(search_string, self.text.lower())
-            if (m): return True
-
-# Each note is a separate file.
 class Note():
     def __init__(self, filename):
         self.filename = filename
@@ -726,19 +398,24 @@ class Note():
         select_x = 0
         selected = 0
         top = 0
+        filebrowser = FileBrowser()
 
         while (True):
             stdscr.clear()
 
             status = ""
             # TODO: Add some kind of header that stays resident at the top of the screen.
+            # TODO: Figure out if we really need to have selected passed back to us.  It had
+            #   something to do with having it set to zero (no link selected), and then having the 
+            #   function reset it to '1' so a link is always accepted, but that might not be
+            #   needed now that browsing and viewing aren't sharing a loop.
             selected = self.cursesoutput(stdscr, top=top, selected=selected)
             #status = f"{file_index + 1} of {len(files)}"
 
             if (status is True and mark_x is not None):
-                status = f"{status} SELECTING2"
+                status = f"{status} SELECTING END"
             elif (select is True):
-                status = f"{status} SELECTING1"
+                status = f"{status} SELECTING START"
 
             if (status):
                 # Make sure a long status doesn't push 
@@ -748,7 +425,7 @@ class Note():
             if (select is True):
                 #c = stdscr.inch(select_y, select_x)
                 #stdscr.insch(select_y, select_x, c, curses.A_REVERSE)
-                highlight(stdscr, select_y, select_x, mark_y, mark_x)
+                zlink.zlink.highlight(stdscr, select_y, select_x, mark_y, mark_x)
             stdscr.refresh()
             command = stdscr.getkey()
 
@@ -827,24 +504,25 @@ class Note():
                 self.reload()
                 continue
             elif (command == "f"):
-                f = FileBrowser()
-                ref = f.browse(stdscr)
-                if (ref):
-                    self.addreference(ref)
-                    self.write()
+                filebrowser.browse(stdscr)
             elif (command == "l"):
                 # Link a note to this note
-                if (globalvars.link_note is None):
-                    globalvars.link_note = self
+                if (zlink.globalvars.link_note is None):
+                    zlink.globalvars.link_note = self
                 else:
-                    self.addnotelink(globalvars.link_note)
+                    self.addnotelink(zlink.globalvars.link_note)
                     self.write()
-                    globalvars.link_note.addnotebacklink(self)
-                    globalvars.link_note.write()
-                    globalvars.link_note = None
+                    zlink.globalvars.link_note.addnotebacklink(self)
+                    zlink.globalvars.link_note.write()
+                    zlink.globalvars.link_note = None
             elif (command == "p"):
-                if (globalvars.copy is not None):
-                    self.addreference(globalvars.copy)
+                if (zlink.globalvars.link_filename and zlink.globalvars.link_text):
+                    link = Link(zlink.globalvars.link_filename)
+                    ref = Reference(link, zlink.globalvars.link_text)
+                    self.addreference(ref)
+                    self.write()
+                elif(zlink.globalvars.copy):
+                    self.addreference(zlink.globalvars.copy)
                     self.write()
             elif (command == "q"):
                 sys.exit()
@@ -853,7 +531,7 @@ class Note():
                 new_title = getstring(stdscr, "New Title: ", 80)
                 original_file = self.filename
                 self.updatetitle(new_title)
-                globalvars.reload = True
+                zlink.globalvars.reload = True
                 self.reload()
                 files = loadnotes()
                 for f in files:
@@ -865,9 +543,9 @@ class Note():
             elif (command == "\n"):
                 if (select is True):
                     if (mark_x is not None):
-                        text = highlight(stdscr, select_y, select_x, mark_y, mark_x)
+                        text = zlink.zlink.highlight(stdscr, select_y, select_x, mark_y, mark_x)
                         link = Link(self.filename, self.title)
-                        globalvars.copy = Reference(link, text)
+                        zlink.globalvars.copy = Reference(link, text)
                         #pyperclip.copy(copy.__str__())
                         select = False
                     else:
@@ -879,8 +557,12 @@ class Note():
                         try:
                             n = Note(link.url)
                         except InvalidNoteException as e:
-                            file = File(link.url)
-                            file.view(stdscr)
+                            # TODO: hitting the arrow keys when viewing a linked file brings us back here; not
+                            #   sure what the most intuitive action is.  Go to the next file? or go the next note?
+                            #   Going to the next file means making sure FileBrowser sets the correct 'cwd' variable so
+                            #   it knows what the files are, and going to the next note means reproducing the right/left code.
+                            f = File(link.url)
+                            f.view(stdscr)
                         else:
                             # TODO: Just return the note object
                             return n.filename
@@ -933,6 +615,22 @@ class Note():
             f.write(self.__str__())
             f.close()
 
+class Reference():
+    def __init__(self, link, text = None):
+        self.text = text
+        self.link = link
+
+    def __str__(self):
+        str = f"{self.link}"
+        if (self.text is not None):
+            str = str + f"\n> {self.text}"
+        return str
+
+    def search(self, search_string):
+        if (self.text is not None):
+            m = re.search(search_string, self.text.lower())
+            if (m): return True
+
 class NoteBrowser():
     def browse(self, stdscr, filename=None):
 
@@ -950,21 +648,24 @@ class NoteBrowser():
         search = ""
         selected = 0
         top = 0
+        filebrowser = FileBrowser()
 
         while (command != "q"):
             stdscr.clear()
 
             status = ""
+
+
             if (note1 is not None):
                 newnote = note1.view(stdscr)
-                if (globalvars.reload):
+                if (zlink.globalvars.reload):
                     files = loadnotes()
                     selected = 0
                     try:
                         selected = files.index(note1.filename)
                     except:
                         pass
-                    globalvars.reload = False
+                    zlink.globalvars.reload = False
                 #selected = note1.cursesoutput(stdscr, top=top, selected=selected)
                 if (newnote):
                     if (newnote == "PREV"):
@@ -1001,6 +702,9 @@ class NoteBrowser():
                     else:
                         stdscr.addstr(("{:" + str(max_width) + "." + str(max_width) + "s}\n").format(f))
                 status = f"{selected+1} of {len(files)}"
+
+            if (move):
+                status = f"{status} MOVING"
 
             if (status):
                 # Make sure a long status doesn't push 
@@ -1093,8 +797,8 @@ class NoteBrowser():
                         note = Note(f)
                         note.updatelinks(original_file, None)
             elif (command == "f"):
-                f = FileBrowser()
-                copy = f.browse(stdscr)
+                #f = FileBrowser()
+                filebrowser.browse(stdscr)
             elif (command == "m"):
                 if (move is True):
                     move = False
@@ -1156,7 +860,7 @@ class NoteBrowser():
                 stdscr.refresh()
                 command = stdscr.getkey()
 
-# Get the next available open slot in a given list of files after the 
+# Get the next available open slot in a given list of files after the
 #   given position.
 def gethole(files, position=0):
     if (len(files) == 0):
@@ -1174,6 +878,15 @@ def gethole(files, position=0):
          next_order = note.order + 1
     return next_order
 
+# Request a string from the user.
+def getstring(stdscr, prompt_string, maxlength=40):
+    curses.echo()
+    stdscr.addstr(curses.LINES-1, 0, prompt_string)
+    stdscr.refresh()
+    input = stdscr.getstr(curses.LINES-1, len(prompt_string), maxlength).decode(encoding='utf-8')
+    curses.noecho()
+    return input
+
 # Return the item at the 'top' of the screen, based on what is currently selected.
 def gettop(selected, current_top, maxlength, center=False):
     top = current_top
@@ -1188,81 +901,11 @@ def gettop(selected, current_top, maxlength, center=False):
         top = maxlength - curses.LINES + 2
     return top
 
-def highlight(stdscr, select_y, select_x, mark_y, mark_x):
-    selected = ""
-    if (mark_y is not None and mark_x is not None):
-        sy = select_y
-        sx = select_x
-        my = mark_y
-        mx = mark_x
-        if (my < sy):
-            foo = sy
-            sy = my
-            my = foo
-            foo = sx
-            sx = mx
-            mx = foo
-        elif (mark_y == select_y):
-            if (mark_x < select_x):
-                foo = select_x
-                sx = mark_x
-                mx = foo
-
-        if (my == sy):
-            for x in range(sx, mx+1):
-                stdscr.chgat(sy, x, 1, curses.A_REVERSE)
-                #selected += str(stdscr.inch(sy, x))
-                selected += chr(stdscr.inch(sy, x) & 0xFF)
-        else:
-            for y in range(sy, my+1):
-                if (y==sy):
-                    for x in range(sx, curses.COLS-2):
-                        stdscr.chgat(y, x, 1, curses.A_REVERSE)
-                        #selected += str(stdscr.inch(y, x))
-                        selected += chr(stdscr.inch(y, x) & 0xFF)
-                elif (y > sy and y < my):
-                    for x in range(0, curses.COLS-2):
-                        stdscr.chgat(y, x, 1, curses.A_REVERSE)
-                        #selected += str(stdscr.inch(y, x))
-                        selected += chr(stdscr.inch(y, x) & 0xFF)
-                elif (y > sy and y==my):
-                    for x in range(0, mx+1):
-                        stdscr.chgat(y, x, 1, curses.A_REVERSE)
-                        #selected += str(stdscr.inch(y, x))
-                        selected += chr(stdscr.inch(y, x) & 0xFF)
-                if (y < my):
-                    selected = f"{selected}\n"
-    else:
-        stdscr.chgat(select_y, select_x, 1, curses.A_REVERSE)
-        selected = chr(stdscr.inch(select_y, select_x) & 0xFF)
-    return selected
-
-def loadfiles(dir):
-    dirs = []
-    if (os.path.dirname(dir) != "/"):
-        dirs.append("..")
-    
-    dirs.extend([f for f in os.listdir(dir) if(os.path.isdir(os.path.join(dir, f)))])
-    dirs.sort()
-    files = [f for f in os.listdir(dir) if(os.path.isfile(os.path.join(dir, f)) and re.search("\.(md|txt|html)$",f))]
-    files.sort()
-    dirs.extend(files)
-    return dirs
-
 # Read the list of notes from the disk.
 def loadnotes():
     files = [f for f in os.listdir(".") if(os.path.isfile(os.path.join(".", f)) and re.search("^\d+ - .+\.md$",f))]
     files.sort()
     return files
-
-# Request a string from the user.
-def getstring(stdscr, prompt_string, maxlength=40):
-    curses.echo() 
-    stdscr.addstr(curses.LINES-1, 0, prompt_string)
-    stdscr.refresh()
-    input = stdscr.getstr(curses.LINES-1, len(prompt_string), maxlength).decode(encoding='utf-8')
-    curses.noecho()
-    return input
 
 def swapnotes(files, original_pos, new_pos):
     n1 = Note(files[original_pos])
@@ -1281,4 +924,3 @@ def swapnotes(files, original_pos, new_pos):
         note.updatelinks(n1_file, n1.filename)
         note.updatelinks(n2_file, n2.filename)
     return files
-
