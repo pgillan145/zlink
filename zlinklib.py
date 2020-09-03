@@ -1,8 +1,8 @@
 import argparse
 import curses
 import datetime
-import logging
 import minorimpact
+#import logging
 import os
 import os.path
 import pyperclip
@@ -44,7 +44,6 @@ class File():
             else:
                 output.append(l)
 
-        #logging.debug(f"LINES:{curses.LINES}, COLS:{curses.COLS}")
         for i in range(0, len(output)):
             if (i < top): continue
             if (i >= (top + curses.LINES - 2 )): continue
@@ -59,7 +58,6 @@ class File():
                 attr = curses.A_BOLD
 
             s = s[:curses.COLS-1]
-            #logging.debug(f"{i}({len(s)}):{s}")
             stdscr.addstr(f"{s}\n", attr)
 
         return
@@ -90,7 +88,9 @@ class File():
         while (True):
             stdscr.clear()
 
+            # TODO: Add some kind of header that stays resident at the top of the screen.
             self.cursesoutput(stdscr, top)
+            # TODO: Add some kind of header that stays resident at the top of the screen.
 
             status = ""
             if (select is True and mark_x is not None):
@@ -168,6 +168,30 @@ class File():
                 else:
                     mark_y = select_y
                     mark_x = select_x
+            elif (command == "?"):
+                stdscr.clear()
+                stdscr.addstr("Editing Commands\n\n", curses.A_BOLD)
+                stdscr.addstr(" c              - enter selection mode to copy text to save the clipboard as a reference\n")
+                stdscr.addstr(" q              - quit\n")
+                stdscr.addstr(" ?              - this help screen\n")
+                stdscr.addstr("\n")
+                stdscr.addstr("Selection Mode Commands\n\n", curses.A_BOLD)
+                stdscr.addstr(" Use the arrow keys to move the cursor to the start of the text you want to select.  Press\n")
+                stdscr.addstr(" <enter> to start highlighting; use the arrow keys to move the cursor to the end of the text\n")
+                stdscr.addstr(" you want to select.  Press <enter> again to copy the text to the clipboard, along with a link\n")
+                stdscr.addstr(" to this note\n")
+                stdscr.addstr("\n")
+				# TODO: Add pgup/pgdn/etc
+                stdscr.addstr("Navigation Commands\n\n", curses.A_BOLD)
+                stdscr.addstr(" f              - open the file browser\n")
+                stdscr.addstr(" <up>/<down>    - scroll through this file\n")
+                stdscr.addstr(" <left>         - previous file\n")
+                stdscr.addstr(" <right>        - next file\n")
+                stdscr.addstr(" <esc>          - return to the previous page\n")
+
+                stdscr.addstr(curses.LINES-1,0,"Press any key to continue", curses.A_BOLD)
+                stdscr.refresh()
+                command = stdscr.getkey()
             elif (command == "\n"):
                 if (select):
                     if (mark_x is not None):
@@ -204,24 +228,16 @@ class FileBrowser():
         if (filename is not None):
             if (re.search("^\/", filename)):
                 cwd = os.path.dirname(filename)
-                logging.debug(f"setting cwd to {cwd}")
             else:
                 filename = os.path.normpath(os.path.join(cwd, filename))
             try:
-                logging.debug(f"using {filename}")
                 file = File(filename)
             except:
                 file = None
 
         files = loadfiles(cwd)
 
-        select = False
-
-        mark_y = None
-        mark_x = None
         search = ""
-        select_y = 0
-        select_x = 0
         selected = 0
         top = 0
         while (command != ""):
@@ -231,17 +247,14 @@ class FileBrowser():
             if (file is not None):
                 newfile = file.view(stdscr)
                 if (newfile is not None):
-                    #logging.debug(f"newfile:{newfile}")
                     file = None
                     newselected = selected
                     while (file is None):
                         if (newfile == "PREV"):
-                            logging.debug("back one")
                             newselected -= 1
                             if (newselected < 0):
                                 newselected = len(files) - 1
                         elif (newfile == "NEXT"):
-                            logging.debug("forward one")
                             newselected += 1
                             if (newselected > len(files) - 1):
                                 newselected = 0
@@ -249,11 +262,9 @@ class FileBrowser():
                             return newfile
                         else:
                             break
-                        #logging.debug(f"selected:{selected}")
 
                         filename = os.path.join(cwd,files[newselected])
                         if (os.path.isdir(filename) and newselected != selected):
-                            logging.debug("this is a directory, go again")
                             continue
                         else:
                             file = File(filename)
@@ -277,20 +288,10 @@ class FileBrowser():
                         stdscr.addstr(("{:" + str(max_width) + "." + str(max_width) + "s}\n").format(f))
                 status = f"{selected+1} of {len(files)}"
 
-            if (status is True and mark_x is not None):
-                status = f"{status} SELECTING2"
-            elif (select is True):
-                status = f"{status} SELECTING1"
-
             if (len(status) > 0):
                 # Make sure a long status doesn't push
                 status = minorimpact.splitstringlen(status, curses.COLS-2)[0]
                 stdscr.addstr(curses.LINES-1,0,status, curses.A_BOLD)
-
-            if (select is True):
-                #c = stdscr.inch(select_y, select_x)
-                #stdscr.insch(select_y, select_x, c, curses.A_REVERSE)
-                highlight(stdscr, select_y, select_x, mark_y, mark_x)
 
             stdscr.refresh()
             command = stdscr.getkey()
@@ -304,13 +305,28 @@ class FileBrowser():
                     selected = len(files)-1
             elif (command == "q"):
                 sys.exit()
+            elif (command == "?"):
+                stdscr.clear()
+                stdscr.addstr("\n")
+                stdscr.addstr("Commands\n\n", curses.A_BOLD)
+                # TODO: Add these navigation commands.
+                #stdscr.addstr("<home>           - first note\n")
+                #stdscr.addstr("<pgup> or ^u     - move the curser up one screen\n")
+                #stdscr.addstr("<pgdown> or ^d   - move the curser up one screen\n")
+                #stdscr.addstr("<end> or G       - last note\n")
+                stdscr.addstr(" <up>/<down>    - next/previous file\n")
+                stdscr.addstr(" <enter>        - open the selected file\n")
+                stdscr.addstr(" <esc>          - return to the previous screen list\n")
+                stdscr.addstr(" ?              - this help screen\n")
+
+                stdscr.addstr(curses.LINES-1,0,"Press any key to continue", curses.A_BOLD)
+                stdscr.refresh()
+                command = stdscr.getkey()
             elif (command == "\n"):
                 f = files[selected]
                 filename = os.path.normpath(os.path.join(cwd,f))
-                logging.debug(f"viewing {f}")
                 if (os.path.isdir(filename)):
                     cwd = filename
-                    logging.debug(f"cwd is now {cwd}")
                     files = loadfiles(cwd)
                     selected = 0
                 else:
@@ -494,7 +510,6 @@ class Note():
     def deletelink(self, selected):
         link = self.getlink(selected)
         if (link is None):
-            logging.debug("no link passed to deletelink")
             return
 
         try:
@@ -507,7 +522,6 @@ class Note():
         except ValueError:
             pass
 
-        logging.debug(f"looking for {link} in references")
         for r in self.references:
             if (r.link == link):
                 try:
@@ -520,7 +534,6 @@ class Note():
     #   each item in the references array.
     def getlink(self, selected):
         current = 1
-        logging.debug(f"{selected} of {self.linkcount()}")
         if (selected < 1 or selected > self.linkcount()):
             return
         for i in self.links:
@@ -718,6 +731,7 @@ class Note():
             stdscr.clear()
 
             status = ""
+            # TODO: Add some kind of header that stays resident at the top of the screen.
             selected = self.cursesoutput(stdscr, top=top, selected=selected)
             #status = f"{file_index + 1} of {len(files)}"
 
@@ -832,6 +846,8 @@ class Note():
                 if (globalvars.copy is not None):
                     self.addreference(globalvars.copy)
                     self.write()
+            elif (command == "q"):
+                sys.exit()
             elif (command == "r"):
                 # get new name
                 new_title = getstring(stdscr, "New Title: ", 80)
@@ -863,10 +879,6 @@ class Note():
                         try:
                             n = Note(link.url)
                         except InvalidNoteException as e:
-                            logging.debug(e)
-                            logging.debug(f"opening {link.url}")
-                            #f=FileBrowser()
-                            #f.browse(stdscr, filename=link.url)
                             file = File(link.url)
                             file.view(stdscr)
                         else:
@@ -885,22 +897,32 @@ class Note():
 
                 return
             elif (command == "?"):
+                # TODO: If the window is smaller than the help text, the thing crashes.
                 stdscr.clear()
                 stdscr.addstr("Editing Commands\n\n", curses.A_BOLD)
-                stdscr.addstr("e            - open this note in the external editor (set the EDITOR environment variable)\n")
-                stdscr.addstr("l            - press once to set this note as the target.  Navigate to another note and press\n")
-                stdscr.addstr("               'l' again to add a link to the first note from the second note.\n")
-                stdscr.addstr("q            - quit\n")
-                stdscr.addstr("r            - rename note\n")
-                stdscr.addstr("t            - edit tags\n")
+                stdscr.addstr(" c              - enter selection mode to copy text to save the clipboard as a reference\n")
+                stdscr.addstr(" e              - open this note in the external editor (set the EDITOR environment variable)\n")
+                stdscr.addstr(" l              - press once to set this note as the target.  Navigate to another note and press\n")
+                stdscr.addstr("                  'l' again to add a link to the first note from the second note.\n")
+                stdscr.addstr(" p              - paste a reference from the clipboard to the current note\n")
+                stdscr.addstr(" q              - quit\n")
+                stdscr.addstr(" r              - rename note\n")
+                stdscr.addstr(" t              - edit tags\n")
+                stdscr.addstr(" ?              - this help screen\n")
+                stdscr.addstr("\n")
+                stdscr.addstr("Selection Mode Commands\n\n", curses.A_BOLD)
+                stdscr.addstr(" Use the arrow keys to move the cursor to the start of the text you want to select.  Press\n")
+                stdscr.addstr(" <enter> to start highlighting; use the arrow keys to move the cursor to the end of the text\n")
+                stdscr.addstr(" you want to select.  Press <enter> again to copy the text to the clipboard, along with a link\n")
+                stdscr.addstr(" to this note\n")
                 stdscr.addstr("\n")
                 stdscr.addstr("Navigation Commands\n\n", curses.A_BOLD)
-                stdscr.addstr("<up>/<down>  - cycle through the links on this note\n")
-                stdscr.addstr("<enter>      - follow the selected link\n")
-                stdscr.addstr("<left>       - previous note\n")
-                stdscr.addstr("<right>      - next note\n")
-                stdscr.addstr("<esc>        - return to note list\n")
-                stdscr.addstr("?            - this help screen\n")
+                stdscr.addstr(" f              - open the file browser\n")
+                stdscr.addstr(" <up>/<down>    - cycle through the links on this note\n")
+                stdscr.addstr(" <enter>        - follow the selected link\n")
+                stdscr.addstr(" <left>         - previous note\n")
+                stdscr.addstr(" <right>        - next note\n")
+                stdscr.addstr(" <esc>          - return to note list\n")
 
                 stdscr.addstr(curses.LINES-1,0,"Press any key to continue", curses.A_BOLD)
                 stdscr.refresh()
@@ -912,27 +934,20 @@ class Note():
             f.close()
 
 class NoteBrowser():
-    def browse(self, stdscr):
+    def browse(self, stdscr, filename=None):
 
         stdscr.clear()
 
         files = loadnotes()
         note1 = None
-        if (args.filename is not None):
-            note1 = Note(args.filename)
+        if (filename is not None):
+            note1 = Note(filename)
 
         command = None
 
         move = False
-        select = False
 
-        copy = None
-        globalvars.link_note = None
-        mark_y = None
-        mark_x = None
         search = ""
-        select_y = 0
-        select_x = 0
         selected = 0
         top = 0
 
@@ -941,45 +956,39 @@ class NoteBrowser():
 
             status = ""
             if (note1 is not None):
-                selected = note1.cursesoutput(stdscr, top=top, selected=selected)
-                # left, PREV
-                notes = loadnotes()
-                selected = 0
-                top = 0
-                try:
-                    note_index = notes.index(self.filename)
-                except:
-                    return
-
-                note_index -= 1
-
-                if (note_index < 0):
-                    note_index = len(notes) - 1
-
-                note1 = Note(files[file_index])
-                # right, NEXT
-                selected = 0
-                top = 0
-                try:
-                    file_index = files.index(note1.filename)
-                except:
-                    note1 = None
-                    continue
-
-                file_index += 1
-
-                if (file_index >= len(files)):
-                    file_index = 0
-                note1 = Note(files[file_index])
-
-                file_index = 0
-                try:
-                    file_index = files.index(note1.filename)
-                except:
-                    note1 = None
+                newnote = note1.view(stdscr)
+                if (globalvars.reload):
+                    files = loadnotes()
                     selected = 0
+                    try:
+                        selected = files.index(note1.filename)
+                    except:
+                        pass
+                    globalvars.reload = False
+                #selected = note1.cursesoutput(stdscr, top=top, selected=selected)
+                if (newnote):
+                    if (newnote == "PREV"):
+                        selected -= 1
+                        if (selected < 0):
+                            selected = len(files) - 1
+                        note1 = Note(files[selected])
+                    elif (newnote == "NEXT"):
+                        selected += 1
+                        if (selected >= len(files)):
+                            selected = 0
+                        note1 = Note(files[selected])
+                    else:
+
+                        try:
+                            note1 = Note(newnote)
+                            selected = files.index(note1.filename)
+                        except Exception as e:
+                            selected = 0
+                            note1 = None
                     continue
-                status = f"{file_index + 1} of {len(files)}"
+                note1 = None
+                continue
+                #status = f"{file_index + 1} of {len(files)}"
             else:
                 top = gettop(selected, top, len(files)-1)
                 for i in range(0,len(files)):
@@ -993,359 +1002,159 @@ class NoteBrowser():
                         stdscr.addstr(("{:" + str(max_width) + "." + str(max_width) + "s}\n").format(f))
                 status = f"{selected+1} of {len(files)}"
 
-            if (status is True and mark_x is not None):
-                status = f"{status} SELECTING2"
-            elif (select is True):
-                status = f"{status} SELECTING1"
-
-            if (status is not None):
+            if (status):
                 # Make sure a long status doesn't push 
                 status = minorimpact.splitstringlen(status, curses.COLS-2)[0]
                 stdscr.addstr(curses.LINES-1,0,status, curses.A_BOLD)
 
-            if (select is True):
-                #c = stdscr.inch(select_y, select_x)
-                #stdscr.insch(select_y, select_x, c, curses.A_REVERSE)
-                highlight(stdscr, select_y, select_x, mark_y, mark_x)
             stdscr.refresh()
             command = stdscr.getkey()
 
-            if (self is not None):
-                if (command == "KEY_DC" or command == ""):
-                    confirm = getstring(stdscr, "Are you sure you want to delete this link? (y/N):", 1)
-                    if (confirm == "y"):
-                        note1.deletelink(selected)
-                        note1.write()
-                elif (command == "KEY_DOWN"):
-                    if (select is True):
-                        if (mark_y is not None):
-                            if (mark_y < curses.LINES-2):
-                                mark_y += 1
-                        else:
-                            if (select_y < curses.LINES-2):
-                                select_y += 1
-                        continue
+            if (command == "KEY_DOWN" or command == "KEY_RIGHT"):
+                original_selected = selected
+                selected += 1
+                if (selected > len(files)-1):
+                    selected = 0
+                if (move is True):
+                    files = swapnotes(files, original_selected, selected)
+            elif (command == "KEY_UP" or command == "KEY_LEFT"):
+                original_selected = selected
+                selected -= 1
+                if (selected < 0):
+                    selected = len(files)-1
+                if (move is True):
+                    files = swapnotes(files, original_selected,selected)
+            elif (command == "KEY_END" or command == "G"):
+                move = False
+                selected = len(files) - 1
+            elif (command == "KEY_HOME"):
+                move = False
+                selected = 0
+            elif (command == "KEY_NPAGE" or command == ""):
+                move = False
+                selected += curses.LINES - 2  
+                if (selected > len(files)-1):
+                    selected = len(files)-1
+            elif (command == "KEY_PPAGE" or command == ""):
+                move = False
+                selected -= curses.LINES - 2
+                if (selected < 0):
+                    selected = 0
+            elif (command == "a"):
+                move = False
+                new_title = getstring(stdscr, "New Note: ", 80)
+                if (new_title == ""):
+                    continue
+                # based on the selected note, figure out how many notes we have to adjust to make a hole
+                if (len(files) == 0):
+                    next_order = 1
+                elif (selected < len(files)-1):
+                    note = Note(files[selected+1])
+                    next_order = note.order + 1
+                    for f in files[selected:]:
+                        n = Note(f)
+                        if (n.order > next_order):
+                            break
+                        next_order = n.order + 1
 
-                    selected += 1
-                    if (selected > note1.linkcount()):
-                        selected = 1
-                elif (command == "KEY_UP"):
-                    if (select is True):
-                        if (mark_y is not None):
-                            if (mark_y > 0):
-                                mark_y -= 1
-                        else:
-                            if (select_y > 0):
-                                select_y -= 1
-                        continue
-
-                    selected -= 1
-                    if (selected < 1):
-                        selected = note1.linkcount()
-                    # stdscr.getyx()
-                    # stdscr.move(y, x)
-                    elif (command == "KEY_LEFT"):
-                        if (select is True):
-                            if (mark_x is not None):
-                                if (mark_x > 0):
-                                    mark_x -= 1
-                            else:
-                                if (select_x > 0):
-                                    select_x -= 1
-                            continue
-                        selected = 0
-                        top = 0
-                        try:
-                            file_index = files.index(note1.filename)
-                        except:
-                            note1 = None
-                            continue
-
-                        file_index -= 1
-
-                        if (file_index < 0):
-                            file_index = len(files) - 1
-
-                        note1 = Note(files[file_index])
-                    elif (command == "KEY_RIGHT"):
-                        if (select is True):
-                            if (mark_x is not None):
-                                if (mark_x < curses.COLS-2):
-                                    mark_x += 1
-                            else:
-                                if (select_x < curses.COLS-2):
-                                    select_x += 1
-                            continue
-
-                        selected = 0
-                        top = 0
-                        try:
-                            file_index = files.index(note1.filename)
-                        except:
-                            note1 = None
-                            continue
-
-                        file_index += 1
-
-                        if (file_index >= len(files)):
-                            file_index = 0
-                        note1 = Note(files[file_index])
-                    elif (command == "c"):
-                        # select text
-                        if (select is False):
-                            # TODO: This is dumb, convert this into some kind of "state" variable
-                            #  so I can just cancel everything with a single command.
-                            select = True
-                            move = False
-                            select_y = 0
-                            select_x = 0
-                            mark_y = None
-                            mark_x = None
-                        else:
-                            mark_y = select_y
-                            mark_x = select_x
-                    elif (command == "e"):
-                        # Edit note
-                        curses.def_prog_mode()
-                        subprocess.call([os.environ['EDITOR'], self.filename])
-                        curses.reset_prog_mode()
-                        self.reload()
-                    elif (command == "f"):
-                        f = FileBrowser()
-                        ref = f.browse(stdscr)
-                        if (ref):
-                            self.addreference(ref)
-                            self.write()
-                    elif (command == "l"):
-                        # Link a note to this note
-                        if (globalvars.link_note is None):
-                            globalvars.link_note = self
-                        else:
-                            self.addnotelink(globalvars.link_note)
-                            self.write()
-                            globalvars.link_note.addnotebacklink(self)
-                            globalvars.link_note.write()
-                            globalvars.link_note = None
-                    elif (command == "p"):
-                        if (globalvars.copy is not None):
-                            self.addreference(globalvars.copy)
-                            self.write()
-                    elif (command == "r"):
-                        # get new name
-                        new_title = getstring(stdscr, "New Title: ", 80)
-                        original_file = self.filename
-                        self.updatetitle(new_title)
-                        files = loadnotes()
-                        for f in files:
-                            note = Note(f)
-                            note.updatelinks(original_file, self.filename)
-                    elif (command == 't'):
-                        new_tags = getstring(stdscr, "Tags: ")
-                        self.updatetags(new_tags)
-                    elif (command == "\n"):
-                        if (select is True):
-                            if (mark_x is not None):
-                                text = highlight(stdscr, select_y, select_x, mark_y, mark_x)
-                                link = Link(self.filename, self.title)
-                                copy = Reference(link, text)
-                                pyperclip.copy(copy.__str__())
-                                select = False
-                            else:
-                                mark_y = select_y
-                                mark_x = select_x
-                        else:
-                            link = self.getlink(selected)
-                            # TODO: Have this detect files, rather than notes, and call FileBrowser with a filename to
-                            #   bypass the selection screen and open the file directly.
-                            if (link is not None and not re.search("^[^ ]+:", link.url)):
-                                try:
-                                    n = Note(link.url)
-                                except InvalidNoteException as e:
-                                    logging.debug(e)
-                                    f=FileBrowser()
-                                    logging.debug(f"opening {link.url}")
-                                    f.browse(stdscr, filename=link.url)
-                                else:
-                                    return n
-                            elif (link is not None and re.search("^[^ ]+:", link.url)):
-                                subprocess.run(['open', link.url], check=True)
-                    elif (command == ''):
-                        if (select is True):
-                            if (mark_x is not None):
-                                mark_x = None
-                                mark_y = None
-                            else:
-                                select = False
-                            continue
-                        else:
-                            return
-
-                    elif (command == "?"):
-                        stdscr.clear()
-                        stdscr.addstr("Editing Commands\n\n", curses.A_BOLD)
-                        stdscr.addstr("e            - open this note in the external editor (set the EDITOR environment variable)\n")
-                        stdscr.addstr("l            - press once to set this note as the target.  Navigate to another note and press\n")
-                        stdscr.addstr("               'l' again to add a link to the first note from the second note.\n")
-                        stdscr.addstr("q            - quit\n")
-                        stdscr.addstr("r            - rename note\n")
-                        stdscr.addstr("t            - edit tags\n")
-                        stdscr.addstr("\n")
-                        stdscr.addstr("Navigation Commands\n\n", curses.A_BOLD)
-                        stdscr.addstr("<up>/<down>  - cycle through the links on this note\n")
-                        stdscr.addstr("<enter>      - follow the selected link\n")
-                        stdscr.addstr("<left>       - previous note\n")
-                        stdscr.addstr("<right>      - next note\n")
-                        stdscr.addstr("<esc>        - return to note list\n")
-                        stdscr.addstr("?            - this help screen\n")
-
-                        stdscr.addstr(curses.LINES-1,0,"Press any key to continue", curses.A_BOLD)
-                        stdscr.refresh()
-                        command = stdscr.getkey()
-                else:
-                    if (command == "KEY_DOWN" or command == "KEY_RIGHT"):
-                        original_selected = selected
-                        selected += 1
-                        if (selected > len(files)-1):
-                            selected = 0
-                        if (move is True):
-                            files = swapnotes(files, original_selected, selected)
-                    elif (command == "KEY_UP" or command == "KEY_LEFT"):
-                        original_selected = selected
-                        selected -= 1
-                        if (selected < 0):
-                            selected = len(files)-1
-                        if (move is True):
-                            files = swapnotes(files, original_selected,selected)
-                    elif (command == "KEY_END" or command == "G"):
-                        move = False
-                        selected = len(files) - 1
-                    elif (command == "KEY_HOME"):
-                        move = False
-                        selected = 0
-                    elif (command == "KEY_NPAGE" or command == ""):
-                        move = False
-                        selected += curses.LINES - 2  
-                        if (selected > len(files)-1):
-                            selected = len(files)-1
-                    elif (command == "KEY_PPAGE" or command == ""):
-                        move = False
-                        selected -= curses.LINES - 2
-                        if (selected < 0):
-                            selected = 0
-                    elif (command == "a"):
-                        move = False
-                        new_title = getstring(stdscr, "New Note: ", 80)
-                        if (new_title == ""):
-                            continue
-                        # based on the selected note, figure out how many notes we have to adjust to make a hole
-                        if (len(files) == 0):
-                            next_order = 1
-                        elif (selected < len(files)-1):
-                            note = Note(files[selected+1])
-                            next_order = note.order + 1
-                            for f in files[selected:]:
-                                n = Note(f)
-                                if (n.order > next_order):
-                                    break
-                                next_order = n.order + 1
-
-                            # now that we have the first free spot, move everything up one
-                            tmp_files = files[selected+1:]
-                            tmp_files.reverse()
-                            for f in tmp_files:
-                                n = Note(f)
-                                if (n.order < next_order):
-                                    original_file = n.filename
-                                    n.updateorder(next_order)
-                                    files = loadnotes()
-                                    for f2 in files:
-                                        n2 = Note(f2)
-                                        n2.updatelinks(original_file, n.filename)
-                                    next_order -= 1
-                        else:
-                            note = Note(files[-1])
-                            next_order = note.order + 1
-                        today = datetime.datetime.now()
-                        date = today.strftime("%Y-%m-%d %H-%M")
-                        filename = "{:04d} - {} - {}.md".format(next_order, date, new_title)
-                        new_note = Note(filename)
-                        new_note.write()
-                        files = loadnotes()
-                        self = new_note
-                    elif (command == "KEY_DC" or command == "d"):
-                        move = False
-                        note = Note(files[selected])
-                        original_file = note.filename
-                        confirm = getstring(stdscr, "Are you sure you want to delete this note? (y/N):", 1)
-                        if (confirm == "y"):
-                            note.delete()
+                    # now that we have the first free spot, move everything up one
+                    tmp_files = files[selected+1:]
+                    tmp_files.reverse()
+                    for f in tmp_files:
+                        n = Note(f)
+                        if (n.order < next_order):
+                            original_file = n.filename
+                            n.updateorder(next_order)
                             files = loadnotes()
-                            for f in files:
-                                note = Note(f)
-                                note.updatelinks(original_file, None)
-                    elif (command == "f"):
-                        f = FileBrowser()
-                        copy = f.browse(stdscr)
-                    elif (command == "m"):
-                        if (move is True):
-                            move = False
-                        else:
-                            move = True
-                    elif (command == "/"):
-                        original_selected = selected
-                        move = False
-                        new_search = getstring(stdscr, "Search for: ")
-                        if (new_search != ""):
-                            search = new_search
-                        if (search == ""):
-                            continue
-                        search = search.lower()
-                        for f in files[selected+1:]:
-                            n = Note(f)
-                            if (n.search(search)):
-                                selected = files.index(f)
-                                break
+                            for f2 in files:
+                                n2 = Note(f2)
+                                n2.updatelinks(original_file, n.filename)
+                            next_order -= 1
+                else:
+                    note = Note(files[-1])
+                    next_order = note.order + 1
+                today = datetime.datetime.now()
+                date = today.strftime("%Y-%m-%d %H-%M")
+                filename = "{:04d} - {} - {}.md".format(next_order, date, new_title)
+                new_note = Note(filename)
+                new_note.write()
+                files = loadnotes()
+                note1 = new_note
+                selected = files.index(note1.filename)
+            elif (command == "KEY_DC" or command == "d"):
+                move = False
+                note = Note(files[selected])
+                original_file = note.filename
+                confirm = getstring(stdscr, "Are you sure you want to delete this note? (y/N):", 1)
+                if (confirm == "y"):
+                    note.delete()
+                    files = loadnotes()
+                    for f in files:
+                        note = Note(f)
+                        note.updatelinks(original_file, None)
+            elif (command == "f"):
+                f = FileBrowser()
+                copy = f.browse(stdscr)
+            elif (command == "m"):
+                if (move is True):
+                    move = False
+                else:
+                    move = True
+            elif (command == "/"):
+                original_selected = selected
+                move = False
+                new_search = getstring(stdscr, "Search for: ")
+                if (new_search != ""):
+                    search = new_search
+                if (search == ""):
+                    continue
+                search = search.lower()
+                for f in files[selected+1:]:
+                    n = Note(f)
+                    if (n.search(search)):
+                        selected = files.index(f)
+                        break
 
-                        if (selected != original_selected):
-                            continue
+                if (selected != original_selected):
+                    continue
 
-                        for f in files[:selected]:
-                            n = Note(f)
-                            if (n.search(search)):
-                                selected = files.index(f)
-                                break
-                    elif (command == "\n"):
-                        move = False
-                        self = Note(files[selected])
-                        selected = 0
-                        top = 0
-                    elif (command == ""):
-                        move = False
-                        link_note = None
-                    elif (command == "?"):
-                        stdscr.clear()
-                        stdscr.addstr("Editing Commands\n", curses.A_BOLD)
-                        stdscr.addstr("a                - add a new note after the selected note\n")
-                        stdscr.addstr("d or <del>       - delete the currently selected note\n")
-                        stdscr.addstr("m                - change to 'move' mode.  <up>/<down> will move the selected note. <esc> to cancel\n")
-                        stdscr.addstr("q                - quit\n")
-                        stdscr.addstr("/                - enter a string to search for\n")
-                        stdscr.addstr("?                - this help screen\n")
+                for f in files[:selected]:
+                    n = Note(f)
+                    if (n.search(search)):
+                        selected = files.index(f)
+                        break
+            elif (command == "\n"):
+                move = False
+                note1 = Note(files[selected])
+                #selected = 0
+                #top = 0
+            elif (command == ""):
+                move = False
+            elif (command == "?"):
+                stdscr.clear()
+                stdscr.addstr("Editing Commands\n", curses.A_BOLD)
+                stdscr.addstr("a                - add a new note after the selected note\n")
+                stdscr.addstr("d or <del>       - delete the currently selected note\n")
+                stdscr.addstr("m                - change to 'move' mode.  <up>/<down> will move the selected note. <esc> to cancel\n")
+                stdscr.addstr("q                - quit\n")
+                stdscr.addstr("/                - enter a string to search for\n")
+                stdscr.addstr("?                - this help screen\n")
 
-                        stdscr.addstr("\n")
-                        stdscr.addstr("Navigation Commands\n", curses.A_BOLD)
-                        stdscr.addstr("<home>           - first note\n")
-                        stdscr.addstr("<up>             - previous/next note\n")
-                        stdscr.addstr("<pgup> or ^u     - move the curser up one screen\n")
-                        stdscr.addstr("<pgdown> or ^d   - move the curser up one screen\n")
-                        stdscr.addstr("<down>           - next note\n")
-                        stdscr.addstr("<end> or G       - last note\n")
-                        stdscr.addstr("<enter>          - open the selected note\n")
-                        stdscr.addstr("<esc>            - cancel 'move' mode, link mode")
+                stdscr.addstr("\n")
+                stdscr.addstr("Navigation Commands\n", curses.A_BOLD)
+                stdscr.addstr("f                - open the file browser\n")
+                stdscr.addstr("<home>           - first note\n")
+                stdscr.addstr("<up>             - previous/next note\n")
+                stdscr.addstr("<pgup> or ^u     - move the curser up one screen\n")
+                stdscr.addstr("<pgdown> or ^d   - move the curser up one screen\n")
+                stdscr.addstr("<down>           - next note\n")
+                stdscr.addstr("<end> or G       - last note\n")
+                stdscr.addstr("<enter>          - open the selected note\n")
+                stdscr.addstr("<esc>            - cancel 'move' mode, link mode")
 
-                        stdscr.addstr(curses.LINES-1,0,"Press any key to continue", curses.A_BOLD)
-                        stdscr.refresh()
-                        command = stdscr.getkey()
+                stdscr.addstr(curses.LINES-1,0,"Press any key to continue", curses.A_BOLD)
+                stdscr.refresh()
+                command = stdscr.getkey()
 
 # Get the next available open slot in a given list of files after the 
 #   given position.
@@ -1356,12 +1165,12 @@ def gethole(files, position=0):
         next_order = note.order + 1
         note = Note(files[position])
         for f in files[position:]:
-            n = zlinklib.Note(f)
+            n = Note(f)
             if (n.order > next_order):
                 break
             next_order = n.order + 1
     else:
-         note = zlinklib.Note(files[-1])
+         note = Note(files[-1])
          next_order = note.order + 1
     return next_order
 
@@ -1456,19 +1265,19 @@ def getstring(stdscr, prompt_string, maxlength=40):
     return input
 
 def swapnotes(files, original_pos, new_pos):
-    n1 = zlinklib.Note(files[original_pos])
+    n1 = Note(files[original_pos])
     n1_file = n1.filename
 
-    n2 = zlinklib.Note(files[new_pos])
+    n2 = Note(files[new_pos])
     n2_file = n2.filename
     new_order = n1.order
     if (n2.order == n1.order and new_pos < original_pos):
         new_order = gethole(files, new_pos)
     n1.updateorder(n2.order)
     n2.updateorder(new_order)
-    files = zlinklib.loadnotes()
+    files = loadnotes()
     for f in files:
-        note = zlinklib.Note(f)
+        note = Note(f)
         note.updatelinks(n1_file, n1.filename)
         note.updatelinks(n2_file, n2.filename)
     return files
