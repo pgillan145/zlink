@@ -5,17 +5,12 @@ import minorimpact
 #import logging
 import os
 import os.path
-import pyperclip
 import re
 import subprocess
 import sys
 
 import zlink
 import zlink.globalvars
-
-#######
-# CLASSES
-#######
 
 class File():
     def __init__(self, filename):
@@ -32,18 +27,13 @@ class File():
 
     def cursesoutput(self, stdscr, top = 0):
         stdscr.clear()
-        output = []
-        output.append(f"__BOLD__{self.filename}")
-        for l in self.data:
-            if (len(l) > 0):
-                for i in minorimpact.splitstringlen(l, curses.COLS-2):
-                    output.append(i)
-            else:
-                output.append(l)
+        output = self.output(top)
 
+        header = f"{os.path.basename(self.filename)}"
+        stdscr.addstr(f"{header}\n", curses.A_BOLD)
         for i in range(0, len(output)):
             if (i < top): continue
-            if (i >= (top + curses.LINES - 2 )): continue
+            if (i >= (top + curses.LINES - 3 )): continue
 
             s = output[i]
             attr = 0
@@ -56,7 +46,8 @@ class File():
 
             s = s[:curses.COLS-1]
             stdscr.addstr(f"{s}\n", attr)
-
+        footer = f""
+        stdscr.addstr(curses.LINES-1, 0, f"{footer}", curses.A_BOLD)
         return
 
     def lines(self, width=0):
@@ -68,6 +59,17 @@ class File():
             else:
                 output.append(l)
         return len(output)
+
+    def output(self, top = 0):
+        output = []
+        for l in self.data:
+            if (len(l) > 0):
+                for i in minorimpact.splitstringlen(l, curses.COLS-2):
+                    output.append(i)
+            else:
+                output.append(l)
+
+        return output
 
     def view(self, stdscr):
         command = None

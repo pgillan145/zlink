@@ -5,7 +5,6 @@ import minorimpact
 #import logging
 import os
 import os.path
-import pyperclip
 import re
 import subprocess
 import sys
@@ -96,80 +95,41 @@ class Note():
         self.references.append(reference)
 
     def cursesoutput(self, stdscr, selected = 0, top = 0):
-        #stdscr.scrollok(True)
-        output = []
-        current = 0
-        output.append(f"__BOLD__{self.title}")
-        if (len(self.tags) > 0):
-            output.append(f"tags: #" + ",#".join(self.tags) + "")
-            output.append("")
+        output = self.output()
 
-        if (len(self.tags) > 0 or self.id is not None): 
-            output.append("")
-        for i in self.default:
-            foo = minorimpact.splitstringlen(i,curses.COLS - 2)
-            for f in foo:
-                output.append(f"{f}")
-        output.append("")
-
-        output.append("### Links")
-        for i in self.links:
-            current += 1
-            if (selected == 0 and current == 1 and len(output) < curses.LINES -2):
-                selected = 1
-            if (selected == current):
-                output.append(f"__REVERSE__{i.text}")
-                if (len(output) > curses.LINES + top - 2):
-                    top = len(output) - curses.LINES + 5
-            else:
-                output.append(f"{i.text}")
-        output.append("")
-
-        output.append("### Backlinks")
-        for i in self.backlinks:
-            current += 1
-            if (selected == 0 and current == 1 and len(output) < curses.LINES -2):
-                selected = 1
-            if (selected == current):
-                output.append(f"__REVERSE__{i.text}")
-                if (len(output) > curses.LINES + top - 2):
-                    top = len(output) - curses.LINES + 5
-            else:
-                output.append(f"{i.text}")
-        output.append("")
-
-        output.append("### References")
-        for i in self.references:
-            current += 1
-            if (selected == 0 and current == 1 and len(output) < curses.LINES -2):
-                selected = 1
-
-            if (selected == current or selected == 0):
-                output.append(f"__REVERSE__{i.link}")
-                if (len(output) > top + curses.LINES - 2):
-                    top = len(output) - curses.LINES + 5
-            else:
-                output.append(f"{i.link}")
-
-            if (i.text is not None):
-                foo = minorimpact.splitstringlen(i.text,curses.COLS - 2)
-                for f in foo:
-                    output.append(f"> {f}")
-            output.append("")
+        header = f"{self.title}"
+        stdscr.addstr( f"{header}\n", curses.A_BOLD)
+                
+        for i in range(0, len(output)):
+            s = output[i]
+ 
+            current = 0
+            m = re.search("^__(\d+)__", s)
+            if (m):
+                current = int(m.group(1))
+                if (current == 1 and selected == 0):
+                    selected = 1
+                s = re.sub(f"__{current}__", "", s)
+                if (current == selected):
+                    s = f"__REVERSE__{s}"
+                    if (len(output) > curses.LINES + top - 3):
+                        top = len(output) - curses.LINES + 7
+                output[i] = s
 
         for i in range(0, len(output)):
             s = output[i]
  
+            current = 0
             attr = 0
-            if (re.match("^__REVERSE__", output[i])):
+            if (re.match("^__REVERSE__", s)):
                 s = s.replace("__REVERSE__", "")
                 attr = curses.A_REVERSE
-            elif (re.match("^__BOLD__", output[i])):
+            elif (re.match("^__BOLD__", s)):
                 s = s.replace("__BOLD__", "")
                 attr = curses.A_BOLD
 
             if (i < top): continue
-            if (i >= top + curses.LINES - 2): continue
+            if (i >= top + curses.LINES - 3): continue
 
             s = s[:curses.COLS-1]
             stdscr.addstr(f"{s}\n", attr)
@@ -229,6 +189,48 @@ class Note():
         count += len(self.backlinks)
         count += len(self.references)
         return count
+
+    def output(self):
+        output = []
+        current = 0
+
+        if (len(self.tags) > 0):
+            output.append(f"tags: #" + ",#".join(self.tags) + "")
+            output.append("")
+
+        if (len(self.tags) > 0 or self.id is not None): 
+            output.append("")
+        for i in self.default:
+            if (i):
+                foo = []
+                foo = minorimpact.splitstringlen(i,curses.COLS - 2)
+                for f in foo:
+                    output.append(f"{f}")
+        output.append("")
+
+        output.append("### Links")
+        for i in self.links:
+            current += 1
+            output.append(f"__{current}__{i.text}")
+        output.append("")
+
+        output.append("### Backlinks")
+        for i in self.backlinks:
+            current += 1
+            output.append(f"__{current}__{i.text}")
+        output.append("")
+
+        output.append("### References")
+        for i in self.references:
+            current += 1
+            output.append(f"__{current}__{i.link}")
+
+            if (i.text is not None):
+                foo = minorimpact.splitstringlen(i.text,curses.COLS - 2)
+                for f in foo:
+                    output.append(f"> {f}")
+            output.append("")
+        return output
 
     def parsefile(self):
         lines = {}
@@ -411,6 +413,7 @@ class Note():
             #   needed now that browsing and viewing aren't sharing a loop.
             selected = self.cursesoutput(stdscr, top=top, selected=selected)
             #status = f"{file_index + 1} of {len(files)}"
+
 
             if (status is True and mark_x is not None):
                 status = f"{status} SELECTING END"
