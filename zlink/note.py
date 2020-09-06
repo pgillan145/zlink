@@ -22,8 +22,6 @@ class Link():
     def __init__(self, url, text=None):
         self.url = url
         if (text is None):
-            # TODO: Strip off the directory name and 
-            #if (re.search("^https?:", url)):
             if (re.search("^\/", url)):
                 text = os.path.basename(url)
             else:
@@ -406,7 +404,6 @@ class Note():
             stdscr.clear()
 
             status = ""
-            # TODO: Add some kind of header that stays resident at the top of the screen.
             # TODO: Figure out if we really need to have selected passed back to us.  It had
             #   something to do with having it set to zero (no link selected), and then having the 
             #   function reset it to '1' so a link is always accepted, but that might not be
@@ -732,6 +729,14 @@ class NoteBrowser():
                 if (move is True):
                     files = swapnotes(files, original_selected,selected)
             elif (command == "KEY_END" or command == "G"):
+                # TODO: Does pgup/pgdown/home/end have to kill the "move" command? or does
+                #   it make sense for me to be able to move a note a vast difference, rather than
+                #   forcing it to be one at a time.  
+                #   Pro: it's faster to move a note a long distance
+                #   Con: if the user accidentally moves it a long distance, it's going to be hard to get it
+                #     back into the correct place.  If there are a ton of notes, shuffling them all could
+                #     take a long time.  Probably need to make sure traversing all the files scales before
+                #     implementing this.
                 move = False
                 selected = len(files) - 1
             elif (command == "KEY_HOME"):
@@ -740,8 +745,8 @@ class NoteBrowser():
             elif (command == "KEY_NPAGE" or command == ""):
                 move = False
                 selected += curses.LINES - 2  
-                if (selected > len(files)-1):
-                    selected = len(files)-1
+                if (selected > len(files) - 1):
+                    selected = len(files) - 1
             elif (command == "KEY_PPAGE" or command == ""):
                 move = False
                 selected -= curses.LINES - 2

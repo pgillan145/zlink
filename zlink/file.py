@@ -85,11 +85,10 @@ class File():
         selected = 0
         top = 0
         while (True):
+            filesize = self.lines(curses.COLS-2)
             stdscr.clear()
 
-            # TODO: Add some kind of header that stays resident at the top of the screen.
             self.cursesoutput(stdscr, top)
-            # TODO: Add some kind of header that stays resident at the top of the screen.
 
             status = ""
             if (select is True and mark_x is not None):
@@ -103,8 +102,6 @@ class File():
                 stdscr.addstr(curses.LINES-1,0,status, curses.A_BOLD)
 
             if (select is True):
-                #c = stdscr.inch(select_y, select_x)
-                #stdscr.insch(select_y, select_x, c, curses.A_REVERSE)
                 zlink.zlink.highlight(stdscr, select_y, select_x, mark_y, mark_x)
 
             stdscr.refresh()
@@ -123,7 +120,7 @@ class File():
                             select_y += 1
                     continue
 
-                if (top < (self.lines(curses.COLS-2) - curses.LINES + 2)):
+                if (top < (filesize - curses.LINES + 2)):
                     top += 1
             elif (command == "KEY_LEFT"):
                 if (select is True):
@@ -156,6 +153,20 @@ class File():
                     continue
                 if (top > 0):
                     top -= 1
+            elif (command == "KEY_PPAGE" or command == ""):
+                if (top > 0):
+                    top -= curses.LINES - 3
+                if (top < 0):
+                    top = 0
+            elif (command == "KEY_NPAGE" or command == ""):
+                if (top < (filesize - curses.LINES + 3)):
+                    top += curses.LINES - 3
+                if (top > (filesize - curses.LINES + 3)):
+                    top = (filesize - curses.LINES + 3)
+            elif (command == "KEY_HOME"):
+                top = 0
+            elif (command == "KEY_END" or command == "G"):
+                top = (filesize - curses.LINES + 3)
             elif (command == "c"):
                 # select text
                 if (select is False):
@@ -180,9 +191,9 @@ class File():
                 stdscr.addstr(" you want to select.  Press <enter> again to copy the text to the clipboard, along with a link\n")
                 stdscr.addstr(" to this note\n")
                 stdscr.addstr("\n")
-				# TODO: Add pgup/pgdn/etc
                 stdscr.addstr("Navigation Commands\n\n", curses.A_BOLD)
-                stdscr.addstr(" f              - open the file browser\n")
+                stdscr.addstr(" <home>/<end>   - move to the beggining/end of the file\n")
+                stdscr.addstr(" <pgup>/<pgdn   - move up/down one screen\n")
                 stdscr.addstr(" <up>/<down>    - scroll through this file\n")
                 stdscr.addstr(" <left>         - previous file\n")
                 stdscr.addstr(" <right>        - next file\n")
@@ -232,6 +243,7 @@ class FileBrowser():
                 file = File(filename)
             except:
                 file = None
+            return file
 
         files = loadfiles(cwd)
 
@@ -268,9 +280,11 @@ class FileBrowser():
                     file = None
                 continue
             else:
+                header = cwd
+                stdscr.addstr(f"{header}\n", curses.A_BOLD)
                 for i in range(0,len(files)):
                     if (i < top): continue
-                    if (i > (top + curses.LINES - 2 )): continue
+                    if (i > (top + curses.LINES - 3 )): continue
                     f = files[i]
                     filename = os.path.normpath(os.path.join(cwd, f))
                     if (os.path.isdir(filename)):
@@ -291,8 +305,8 @@ class FileBrowser():
             command = stdscr.getkey()
             if (command == "KEY_DOWN" or command == "KEY_RIGHT"):
                 selected += 1
-                if (selected > top + (curses.LINES - 2)):
-                    top = selected - (curses.LINES - 2)
+                if (selected > top + (curses.LINES - 3)):
+                    top = selected - (curses.LINES - 3)
                 if (selected > len(files)-1):
                     selected = 0
                     top = 0
@@ -302,24 +316,44 @@ class FileBrowser():
                     top = selected
                 if (selected < 0):
                     selected = len(files)-1
+                    top = len(files) - 1 - (curses.LINES - 3)
+                    if (top < 0):
+                        top = 0
+            elif (command == "KEY_END" or command == "G"):
+                selected = len(files) - 1
+                top = len(files) - 1 - (curses.LINES - 3)
+                if (top < 0):
                     top = 0
-                    if (selected > top + (curses.LINES - 2)):
-                        top = selected - (curses.LINES - 2)
+            elif (command == "KEY_HOME"):
+                move = False
+                selected = 0
+                top = 0
+            elif (command == "KEY_NPAGE" or command == ""):
+                selected += curses.LINES - 3
+                if (selected > len(files)-1):
+                    selected = len(files)-1
+                top = selected - curses.LINES + 3
+                if (top < 0):
+                    top = 0
+            elif (command == "KEY_PPAGE" or command == ""):
+                selected -= curses.LINES - 3
+                if (selected < 0):
+                    selected = 0
+                top = selected
             elif (command == "q"):
                 sys.exit()
             elif (command == "?"):
                 stdscr.clear()
                 stdscr.addstr("\n")
                 stdscr.addstr("Commands\n\n", curses.A_BOLD)
-                # TODO: Add these navigation commands.
-                #stdscr.addstr("<home>           - first note\n")
-                #stdscr.addstr("<pgup> or ^u     - move the curser up one screen\n")
-                #stdscr.addstr("<pgdown> or ^d   - move the curser up one screen\n")
-                #stdscr.addstr("<end> or G       - last note\n")
-                stdscr.addstr(" <up>/<down>    - next/previous file\n")
-                stdscr.addstr(" <enter>        - open the selected file\n")
-                stdscr.addstr(" <esc>          - return to the previous screen list\n")
-                stdscr.addstr(" ?              - this help screen\n")
+                stdscr.addstr(" <home>          - first file\n")
+                stdscr.addstr(" <pgup> or ^u    - move the curser up one screen\n")
+                stdscr.addstr(" <pgdown> or ^d  - move the curser up one screen\n")
+                stdscr.addstr(" <end> or G      - last file\n")
+                stdscr.addstr(" <up>/<down>     - next/previous file\n")
+                stdscr.addstr(" <enter>         - open the selected file\n")
+                stdscr.addstr(" <esc>           - return to the previous screen list\n")
+                stdscr.addstr(" ?               - this help screen\n")
 
                 stdscr.addstr(curses.LINES-1,0,"Press any key to continue", curses.A_BOLD)
                 stdscr.refresh()

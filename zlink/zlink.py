@@ -59,9 +59,20 @@ def highlight(stdscr, select_y, select_x, mark_y, mark_x):
     return selected
 
 def zl(stdscr):
+    stdscr.clear()
+    n = zlink.note.NoteBrowser()
+    n.browse(stdscr)
+
+def main():
+    # I like 'vi', so that's the default editor.
+    if ('EDITOR' not in os.environ):
+        os.environ.setdefault('EDITOR', 'vi')
+
+    # Hitting escape bungs everything up for a second; this reduces the delay.
+    os.environ.setdefault('ESCDELAY', '15')
+
     #logging.basicConfig(level=logging.DEBUG, filename="./zlink.log")
     #logging.debug("-------")
-    stdscr.clear()
 
     parser = argparse.ArgumentParser(description="Peruse and maintain a collection of Zettelkasten files in the current directory.")
     parser.add_argument('filename', nargs="?")
@@ -76,11 +87,11 @@ def zl(stdscr):
         note2 = zlink.note.Note(args.addlink)
         note1.addnotelink(note2)
         note1.write()
-        stdscr.addstr(f"Added link {note2.title} to {note1.title}\n")
+        print(f"Added link {note2.title} to {note1.title}")
         if (args.nobacklink is False):
             note2.addnotebacklink(note1)
             note2.write()
-            stdscr.addstr(f"Added backlink {note1.title} to {note2.title}\n")
+            print(f"Added backlink {note1.title} to {note2.title}")
         stdscr.refresh()
         sys.exit()
     elif (args.defrag is True):
@@ -90,32 +101,21 @@ def zl(stdscr):
         for i in range(0, len(files)):
             n = None
             try:
-                n = note.Note(files[i])
+                n = zlink.note.Note(files[i])
             except:
                 raise Exception(f"Can't open '{files[i]}'")
 
             if (n.order != i+1):
                 original_file = n.filename
                 n.updateorder(i+1)
-                stdscr.addstr(f"Moved {original_file} to {note.filename}\n")
+                print(f"Moved {original_file} to {n.filename}")
                 files[i] = n.filename
 
                 for file in files:
-                    scannote = zlink.note.Note(f)
+                    scannote = zlink.note.Note(file)
                     scannote.updatelinks(original_file, n.filename)
-        stdscr.refresh()
         sys.exit()
 
-    n = zlink.note.NoteBrowser()
-    n.browse(stdscr, args.filename)
-
-def main():
-    # I like 'vi', so that's the default editor.
-    if ('EDITOR' not in os.environ):
-        os.environ.setdefault('EDITOR', 'vi')
-
-    # Hitting escape bungs everything up for a second; this reduces the delay.
-    os.environ.setdefault('ESCDELAY', '15')
     curses.wrapper(zl)
 
 
