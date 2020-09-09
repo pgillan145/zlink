@@ -9,6 +9,8 @@ import re
 import subprocess
 import sys
 
+from minorimpact.curses import getstring, highlight
+
 import zlink
 import zlink.globalvars
 
@@ -425,7 +427,7 @@ class Note():
             if (select is True):
                 #c = stdscr.inch(select_y, select_x)
                 #stdscr.insch(select_y, select_x, c, curses.A_REVERSE)
-                zlink.zlink.highlight(stdscr, select_y, select_x, mark_y, mark_x)
+                highlight(stdscr, select_y, select_x, mark_y, mark_x)
             stdscr.refresh()
             command = stdscr.getkey()
 
@@ -543,7 +545,7 @@ class Note():
             elif (command == "\n"):
                 if (select is True):
                     if (mark_x is not None):
-                        text = zlink.zlink.highlight(stdscr, select_y, select_x, mark_y, mark_x)
+                        text = highlight(stdscr, select_y, select_x, mark_y, mark_x)
                         link = Link(self.filename, self.title)
                         zlink.globalvars.copy = Reference(link, text)
                         #pyperclip.copy(copy.__str__())
@@ -885,15 +887,6 @@ def gethole(files, position=0):
          note = Note(files[-1])
          next_order = note.order + 1
     return next_order
-
-# Request a string from the user.
-def getstring(stdscr, prompt_string, maxlength=40):
-    curses.echo()
-    stdscr.addstr(curses.LINES-1, 0, prompt_string)
-    stdscr.refresh()
-    input = stdscr.getstr(curses.LINES-1, len(prompt_string), maxlength).decode(encoding='utf-8')
-    curses.noecho()
-    return input
 
 # Return the item at the 'top' of the screen, based on what is currently selected.
 def gettop(selected, current_top, maxlength, center=False):

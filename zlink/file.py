@@ -9,6 +9,8 @@ import re
 import subprocess
 import sys
 
+from minorimpact.curses import getstring, highlight
+
 import zlink
 import zlink.globalvars
 
@@ -102,7 +104,7 @@ class File():
                 stdscr.addstr(curses.LINES-1,0,status, curses.A_BOLD)
 
             if (select is True):
-                zlink.zlink.highlight(stdscr, select_y, select_x, mark_y, mark_x)
+                highlight(stdscr, select_y, select_x, mark_y, mark_x)
 
             stdscr.refresh()
             command = stdscr.getkey()
@@ -206,7 +208,7 @@ class File():
                 if (select):
                     if (mark_x is not None):
                         zlink.globalvars.link_filename = self.filename
-                        zlink.globalvars.link_text = zlink.zlink.highlight(stdscr, select_y, select_x, mark_y, mark_x)
+                        zlink.globalvars.link_text = highlight(stdscr, select_y, select_x, mark_y, mark_x)
                         #pyperclip.copy(copy.__str__())
                         select = False
                         select_y = 0
