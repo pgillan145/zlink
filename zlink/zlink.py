@@ -2,7 +2,7 @@
 
 import argparse
 import curses
-#import logging
+import logging
 import minorimpact
 import os
 import sys
@@ -71,16 +71,21 @@ def main():
     # Hitting escape bungs everything up for a second; this reduces the delay.
     os.environ.setdefault('ESCDELAY', '15')
 
-    #logging.basicConfig(level=logging.DEBUG, filename="./zlink.log")
-    #logging.debug("-------")
 
     parser = argparse.ArgumentParser(description="Peruse and maintain a collection of Zettelkasten files in the current directory.")
     parser.add_argument('filename', nargs="?")
     parser.add_argument('--addlink', help = "add a link to ADDLINK to filename")
     parser.add_argument('--nobacklink', help = "when adding a link, don't create a backlink from filename to ADDLINK", action='store_true')
     parser.add_argument('--defrag', help = "update the zettelkasten files to remove any gaps between entries", action='store_true')
+    parser.add_argument('--logging', help = "turn on logging", action='store_true')
     args = parser.parse_args()
 
+    if (args.logging):
+        numeric_level = getattr(logging, zlink.globalvars.log_level.upper(), None)
+        if not isinstance(numeric_level, int):
+            raise ValueError('Invalid log level: %s' % loglevel)
+        logging.basicConfig(format='%(asctime)s: %(message)s', datefmt='%m/%d/%Y %I:%M:%S %p', level=numeric_level, filename=zlink.globalvars.log_filename)
+        logging.debug("-------")
     if (args.addlink is not None and args.filename is not None):
         # Don't look at anything, just create a link from one file to another.
         note1 = zlink.note.Note(args.filename)

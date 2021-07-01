@@ -2,7 +2,7 @@ import argparse
 import curses
 import datetime
 import minorimpact
-#import logging
+import logging
 import os
 import os.path
 import re
@@ -363,26 +363,29 @@ class Note():
         self.filename = "{:04d} - {} - {}.md".format(self.order, self.id, self.title)
         os.rename(original_file, self.filename)
 
+    # Change any links for this note from 'url' to 'new_url'.
     def updatelinks(self, url, new_url):
         new_note = None
         if (new_url is not None):
             new_note = Note(new_url)
 
-        for i in self.links:
-            if (i.url == url):
+        for l in self.links:
+            if (l.url == url):
                 if (new_note is None):
-                    self.links.remove(i)
+                    self.links.remove(l)
                 else:
-                    i.url = new_note.filename
-                    i.text = new_note.title
+                    logging.debug('changing link from %s:"%s" to %s:"%s"', l.url, l.text, new_note.filename, new_note.title) 
+                    l.url = new_note.filename
+                    l.text = new_note.title
                 
-        for i in self.backlinks:
-            if (i.url == url):
+        for b in self.backlinks:
+            if (b.url == url):
                 if (new_note is None):
-                    self.backlinks.remove(i)
+                    self.backlinks.remove(b)
                 else:
-                    i.url = new_note.filename
-                    i.text = new_note.title
+                    logging.debug('changing backlink from %s:"%s" to %s:"%s"', b.url, b.text, new_note.filename, new_note.title) 
+                    b.url = new_note.filename
+                    b.text = new_note.title
         self.write()
         
     def view(self, stdscr):

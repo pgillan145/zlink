@@ -2,7 +2,7 @@ import argparse
 import curses
 import datetime
 import minorimpact
-#import logging
+import logging
 import os
 import os.path
 import re
