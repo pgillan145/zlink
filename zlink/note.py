@@ -511,10 +511,11 @@ class Note():
             elif (command == "f"):
                 filebrowser.browse(stdscr)
             elif (command == "l"):
-                # Link a note to this note
                 if (zlink.globalvars.link_note is None):
+                    # store this note for linking later
                     zlink.globalvars.link_note = self
                 else:
+                    # link the previous note to the current note
                     self.addnotelink(zlink.globalvars.link_note)
                     self.write()
                     zlink.globalvars.link_note.addnotebacklink(self)
@@ -590,11 +591,13 @@ class Note():
                 stdscr.addstr(" c              - enter selection mode to copy text to save the clipboard as a reference\n")
                 stdscr.addstr(" e              - open this note in the external editor (set the EDITOR environment variable)\n")
                 stdscr.addstr(" l              - press once to set this note as the target.  Navigate to another note and press\n")
-                stdscr.addstr("                  'l' again to add a link to the first note from the second note.\n")
+                stdscr.addstr("                  'l' again to add a link to the target note to the current note\n")
                 stdscr.addstr(" p              - paste a reference from the clipboard to the current note\n")
                 stdscr.addstr(" q              - quit\n")
                 stdscr.addstr(" r              - rename note\n")
                 stdscr.addstr(" t              - edit tags\n")
+                stdscr.addstr(" <del> or       - delete the currently selected link or backlink\n")
+                stdscr.addstr(" <backspace>\n")
                 stdscr.addstr(" ?              - this help screen\n")
                 stdscr.addstr("\n")
                 stdscr.addstr("Selection Mode Commands\n\n", curses.A_BOLD)
@@ -660,7 +663,6 @@ class NoteBrowser():
 
             status = ""
 
-
             if (note1 is not None):
                 newnote = note1.view(stdscr)
                 if (zlink.globalvars.reload):
@@ -710,6 +712,8 @@ class NoteBrowser():
 
             if (move):
                 status = f"{status} MOVING"
+            if (zlink.globalvars.link_note is not None):
+                status = f"{status} LINKING"
 
             if (status):
                 # Make sure a long status doesn't push 
@@ -798,8 +802,11 @@ class NoteBrowser():
                 files = loadnotes()
                 note1 = new_note
                 selected = files.index(note1.filename)
-            elif (command == "KEY_DC" or command == "d"):
-                move = False
+            elif (command == "KEY_DC" or command == "d" or command == "^?"):
+                if (move is True or zlink.globalvars.link_note is not None):
+                    move = False
+                    zlink.globalvars.link_note = None
+                    continue
                 note = Note(files[selected])
                 original_file = note.filename
                 confirm = getstring(stdscr, "Are you sure you want to delete this note? (y/N):", 1)
@@ -812,6 +819,19 @@ class NoteBrowser():
             elif (command == "f"):
                 #f = FileBrowser()
                 filebrowser.browse(stdscr)
+            elif (command == "l"):
+                move = False
+                note = Note(files[selected])
+                if (zlink.globalvars.link_note is None):
+                    # store this note for linking later
+                    zlink.globalvars.link_note = note
+                elif (note is not None):
+                    # link the previous note to the current note
+                    note.addnotelink(zlink.globalvars.link_note)
+                    note.write()
+                    zlink.globalvars.link_note.addnotebacklink(note)
+                    zlink.globalvars.link_note.write()
+                    zlink.globalvars.link_note = None
             elif (command == "m"):
                 if (move is True):
                     move = False
@@ -841,19 +861,34 @@ class NoteBrowser():
                         selected = files.index(f)
                         break
             elif (command == "\n"):
-                if (move is True):
+                if (move is True or zlink.globalvars.link_note is not None):
+                    # clear any 'special' modes.
                     move = False
+                    if (zlink.globalvars.link_note is not None):
+                        note = Note(files[selected])
+                        if (note is not None):
+                            # link the previous note to the current note
+                            note.addnotelink(zlink.globalvars.link_note)
+                            note.write()
+                            zlink.globalvars.link_note.addnotebacklink(note)
+                            zlink.globalvars.link_note.write()
+                        zlink.globalvars.link_note = None
                     continue
+                    
                 note1 = Note(files[selected])
                 #selected = 0
                 #top = 0
             elif (command == ""):
+                # clear any 'special' modes.
                 move = False
+                zlink.globalvars.link_note = None
             elif (command == "?"):
                 stdscr.clear()
                 stdscr.addstr("Editing Commands\n", curses.A_BOLD)
                 stdscr.addstr("a                - add a new note after the selected note\n")
                 stdscr.addstr("d or <del>       - delete the currently selected note\n")
+                stdscr.addstr("l                - will set the current note to the target and activate 'link' mode.  Navigating to any other")
+                stdscr.addstr("                   note and pressing 'l' (or <enter>) again will link the current note to the target note")
                 stdscr.addstr("m                - change to 'move' mode.  <up>/<down> will move the selected note. <esc> to cancel\n")
                 stdscr.addstr("q                - quit\n")
                 stdscr.addstr("/                - enter a string to search for\n")
@@ -868,8 +903,8 @@ class NoteBrowser():
                 stdscr.addstr("<pgdown> or ^d   - move the curser up one screen\n")
                 stdscr.addstr("<down>           - next note\n")
                 stdscr.addstr("<end> or G       - last note\n")
-                stdscr.addstr("<enter>          - open the selected note\n")
-                stdscr.addstr("<esc>            - cancel 'move' mode, link mode")
+                stdscr.addstr("<enter>          - open the selected note (or turn off 'move' or 'link'  mode)\n")
+                stdscr.addstr("<esc>            - cancel 'move' mode, 'link' mode")
 
                 stdscr.addstr(curses.LINES-1,0,"Press any key to continue", curses.A_BOLD)
                 stdscr.refresh()
