@@ -841,7 +841,9 @@ class NoteBrowser():
                         selected = files.index(f)
                         break
             elif (command == "\n"):
-                move = False
+                if (move is True):
+                    move = False
+                    continue
                 note1 = Note(files[selected])
                 #selected = 0
                 #top = 0
