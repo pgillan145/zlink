@@ -51,7 +51,7 @@ class Note():
         #if (self.id is not None):
         #    str = str + f"[_metadata_:id]:- {self.id}\n"
         if (len(self.tags) > 0):
-            str = str + f"[_metadata_:tags]:- " + ",".join(self.tags) + "\n"
+            str = str + f'[_metadata_:tags]:- "' + ','.join(self.tags) + '"\n'
 
         if (len(str) > 0): str = str + "\n"
         for i in self.default:
@@ -243,7 +243,7 @@ class Note():
         section = "default"
         for l in lines:
             # collect metadata
-            m = re.search("^\[_metadata_:(.+)\]:- +(.+)$", l)
+            m = re.search('^\[_metadata_:(.+)\]:- +"?([^"]+)"?$', l)
             if (m):
                 key = m.group(1)
                 value = m.group(2)
@@ -386,6 +386,7 @@ class Note():
                     logging.debug('changing backlink from %s:"%s" to %s:"%s"', b.url, b.text, new_note.filename, new_note.title) 
                     b.url = new_note.filename
                     b.text = new_note.title
+        # TODO: References aren't getting updated, they go out of date as soon as a note changes position.
         self.write()
         
     def view(self, stdscr):
@@ -761,7 +762,10 @@ class NoteBrowser():
                 selected -= curses.LINES - 2
                 if (selected < 0):
                     selected = 0
-            elif (command == "a"):
+            elif (command == "a" or command == "o"):
+                #TODO: Make an 'A'/'O' command that adds a new note *before* the current note.  (It's the exact same
+                #      code, it just starts with [current-1] rather than [current], I just don't feel like factoring
+                #      right now.
                 move = False
                 new_title = getstring(stdscr, "New Note: ", 80)
                 if (new_title == ""):
