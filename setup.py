@@ -14,5 +14,5 @@ setup(
     setup_requires = [],
     tests_require = [],
     url = "https://github.com/pgillan145/zlink",
-    version = '0.0.5'
+    version = '0.0.6'
 )
