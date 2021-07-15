@@ -2,10 +2,12 @@
 
 import os
 import random
+import re
 import tempfile
 import unittest
 import zlink.note
 
+# https://docs.python.org/3/library/unittest.html
 # test fixture
 #   setup steps necessary to run one or more tests
 #test case
@@ -41,7 +43,7 @@ class TestNote(unittest.TestCase):
         self.assertEqual(fields[0], '000' + str(note_order))
         self.assertEqual(fields[2], 'TITLE.md')
 
-        # verify the search functions work
+        # verify the internal search function works
         self.assertTrue(note.search("title"))
         self.assertTrue(note.search("TITLE"))
         self.assertFalse(note.search("foo"))
@@ -55,7 +57,7 @@ class TestNote(unittest.TestCase):
             new_note = zlink.note.Note("invalid filename")
 
     def test_002_multiplenotes(self):
-        # create multiple notes, make sure 
+        # create multiple notes, make sure they're loaded properly
         note1 = zlink.note.newNote(1,"ONE")
         note2 = zlink.note.newNote(2,"TWO")
         self.assertEqual(note1.order,1)
@@ -80,8 +82,90 @@ class TestNote(unittest.TestCase):
         self.assertEqual(zlink.note.Note(notes[1]).title, "THREE")
         self.assertEqual(zlink.note.Note(notes[2]).order, 3)
 
+        # create a new note with an order/position that's already defined
+        # (NOTE: should this be allowed? Maybe we should throw an error if you're creating
+        #        new note that's already taken? We might want to revisit this)
+        note4 = zlink.note.newNote(3, "FOUR")
+        notes = zlink.note.loadnotes()
+        self.assertEqual(zlink.note.Note(notes[2]).order, 3)
+        self.assertEqual(zlink.note.Note(notes[3]).order, 3)
+        new_hole = zlink.note.makehole(notes, 2)
+
+        # make sure makehole() fixes duplicate orders
+        self.assertEqual(new_hole, 3)
+        notes = zlink.note.loadnotes()
+        self.assertEqual(zlink.note.Note(notes[2]).order, 4)
+        self.assertEqual(zlink.note.Note(notes[3]).order, 5)
+
+        # make sure delete() works
+        note = zlink.note.Note(notes[1])
+        self.assertEqual(note.title, "THREE")
+        note.delete()
+        notes = zlink.note.loadnotes()
+        self.assertEqual(len(notes), 3)
+        self.assertEqual(zlink.note.Note(notes[0]).title, "TWO")
+        self.assertEqual(zlink.note.Note(notes[1]).title, "FOUR")
+        self.assertEqual(zlink.note.Note(notes[2]).title, "ONE")
+
     def test_003_links(self):
-        return
+        note1 = zlink.note.newNote(1,"ONE")
+        note2 = zlink.note.newNote(2,"TWO")
+        notes = zlink.note.loadnotes()
+        self.assertEqual(len(notes), 2)
+
+        # confirm note links are created correctly
+        note1.addnotelink(note2)
+        note1.write()
+        test_note = zlink.note.Note(note1.filename)
+        self.assertEqual(test_note.linkcount(),1)
+        # TODO: Verify there's a good reason for the link selection to be 1 based rather than 0 based
+        #       like note selection.  I *think* I did that on purpose, but I have no idea why.
+        link = test_note.getlink(1)
+        self.assertEqual(link.text, "TWO")
+        self.assertTrue(re.search(" - TWO.md$", link.url))
+        self.assertTrue(re.search("^0002 - ", link.url))
+        original_url = link.url
+
+
+        # Insert a new entry and confirm that the url is properly updated on the notes that were moved
+        new_hole = zlink.note.makehole(notes, 1)
+        self.assertEqual(new_hole, 2)
+        note3 = zlink.note.newNote(new_hole, "THREE")
+
+        notes = zlink.note.loadnotes()
+        test_note = zlink.note.Note(notes[0])
+        self.assertEqual(test_note.title, "ONE")
+        # NOTE: still confusing
+        link = test_note.getlink(1)
+        self.assertEqual(link.text, "TWO")
+        self.assertTrue(re.search(" - TWO.md$", link.url))
+        self.assertTrue(re.search("^0003 - ", link.url))
+        self.assertTrue(re.sub("^0002 - ", "0003 - ", original_url), link.url)
+    
+
+    def test_004_filters(self):
+        # verify filters only show us the notes we expect
+        note1 = zlink.note.newNote(1, "ONE")
+        note1.default = ["this is data for note number one"]
+        note1.write()
+        note2 = zlink.note.newNote(2, "TWO")
+        note2.default = ["this is data for note number two"]
+        note2.write()
+        note3 = zlink.note.newNote(3, "THREE")
+        note3.default = ["this is garbage for note number three"]
+        note3.write()
+
+        zlink.globalvars.filter = "data"
+        notes = zlink.note.loadnotes()
+        self.assertEqual(len(notes), 2)
+
+        zlink.globalvars.filter = "garbage"
+        notes = zlink.note.loadnotes()
+        self.assertEqual(len(notes), 1)
+
+        zlink.globalvars.filter = ""
+        notes = zlink.note.loadnotes()
+        self.assertEqual(len(notes), 3)
 
 if __name__ == "__main__":
     unittest.main()
