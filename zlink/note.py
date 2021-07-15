@@ -328,6 +328,7 @@ class Note():
         self.__init__(self.filename)
 
     def search(self, search_string):
+        search_string = search_string.lower()
         m = re.search(search_string, self.title.lower())
         if (m): return True
         m = re.search(search_string, self.id.lower())
