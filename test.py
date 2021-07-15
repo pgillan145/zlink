@@ -126,7 +126,6 @@ class TestNote(unittest.TestCase):
         self.assertTrue(re.search("^0002 - ", link.url))
         original_url = link.url
 
-
         # Insert a new entry and confirm that the url is properly updated on the notes that were moved
         new_hole = zlink.note.makehole(notes, 1)
         self.assertEqual(new_hole, 2)
@@ -142,7 +141,6 @@ class TestNote(unittest.TestCase):
         self.assertTrue(re.search("^0003 - ", link.url))
         self.assertTrue(re.sub("^0002 - ", "0003 - ", original_url), link.url)
     
-
     def test_004_filters(self):
         # verify filters only show us the notes we expect
         note1 = zlink.note.newNote(1, "ONE")
@@ -166,6 +164,23 @@ class TestNote(unittest.TestCase):
         zlink.globalvars.filter = ""
         notes = zlink.note.loadnotes()
         self.assertEqual(len(notes), 3)
+
+    # TODO:
+    #        Write a test to focus on data.
+    #           - tags, references, backlinks and whatnot
+    #        Write at least one test that dumps a note to a string and verifies the actual data.  That
+    #           seems like a bug that could happen really easily.
+    #        Compare the data to the actual file written to disk to make sure no bugs are creeping in that way.
+    #        Move a lot of the note creation code to the startUp() function, and break each long test function into
+    #           smaller methods, and turn each of the test methods I have now into seperate test cases.  I think smaller
+    #           is better when it comes to these things.
+    #        Figure out if there's some way to have these tests "build" on one another.  It seems like the work done during early tests
+    #           of basic functionality could serve as a basis for more complicated tests further down in the process.
+    #        Likewise... it seems odd that these tests would be run in alphabetical order as opposed the order that they're defined... while it's
+    #           true they don't have to be run in any specific order since the data is blown away and recreated between each one, but if a "high" level
+    #           mechanism breaks, it'll be way harder to troubleshoot than it would have been if I'd seen the failed "low" level test first.  Numbering
+    #           the functions seems like a meh solution compared to being able to define dependencies.
+
 
 if __name__ == "__main__":
     unittest.main()

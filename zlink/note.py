@@ -328,6 +328,8 @@ class Note():
         self.__init__(self.filename)
 
     def search(self, search_string):
+        # TODO: Make it so any string that starts with '#' will also match tags, even though
+        #       they don't have a 'hashtag' in their raw form.
         search_string = search_string.lower()
         m = re.search(search_string, self.title.lower())
         if (m): return True
@@ -366,6 +368,8 @@ class Note():
         self.write()
 
     def updatetitle(self, new_title):
+        # TODO: Should this just use the write() method?  Does that method know how handle changes that would result in an 
+        #       altered filename?  If it doesn't, it really, really should.
         original_file = self.filename
         self.title = new_title
         self.filename = "{:04d} - {} - {}.md".format(self.order, self.id, self.title)
@@ -373,6 +377,7 @@ class Note():
 
     # Change any links for this note from 'url' to 'new_url'.
     def updatelinks(self, url, new_url):
+        # TODO: Make this work with actual link objects, as opposed to just passing around ghetto urls.
         new_note = None
         if (new_url is not None):
             new_note = Note(new_url)
@@ -635,6 +640,11 @@ class Note():
                 command = stdscr.getkey()
 
     def write(self):
+        # TODO: Make this compare the filename in the object with the filename that would be generated from the object
+        #       data, and if they don't match, you know... fucking fix it.  This shouldn't be happening in updateTitle() or 
+        #       updateOrder().
+        # NOTE: I think i may have looked into this before, but see if there's a way for an object to detect changes to itself and 
+        #       perform actions if something is different.  That could be a thing, right?
         with open(self.filename, "w") as f:
             f.write(self.__str__())
             f.close()
@@ -811,7 +821,7 @@ class NoteBrowser():
                 note1 = new_note
                 selected = files.index(note1.filename)
             elif (command == "KEY_DC" or command == 'd' or command == '^?'):
-                if (zlink.globalvars.filter == ""):
+                if (zlink.globalvars.filter != ""):
                     continue
                 if (move is True or zlink.globalvars.link_note is not None):
                     move = False
