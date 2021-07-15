@@ -733,6 +733,8 @@ class NoteBrowser():
                 status = f"{status} MOVING"
             if (zlink.globalvars.link_note is not None):
                 status = f"{status} LINKING"
+            if (zlink.globalvars.filter != ""):
+                status = f"{status} FILTERED:'{zlink.globalvars.filter}'"
 
             if (status):
                 # Make sure a long status doesn't push 
@@ -808,7 +810,9 @@ class NoteBrowser():
                 files = loadnotes()
                 note1 = new_note
                 selected = files.index(note1.filename)
-            elif (command == "KEY_DC" or command == "d" or command == "^?"):
+            elif (command == "KEY_DC" or command == 'd' or command == '^?'):
+                if (zlink.globalvars.filter == ""):
+                    continue
                 if (move is True or zlink.globalvars.link_note is not None):
                     move = False
                     zlink.globalvars.link_note = None
@@ -828,7 +832,7 @@ class NoteBrowser():
             elif (command == 'F'):
                 original_selected = selected
                 note = Note(files[selected])
-                new_filter = getstring(stdscr, "filter for: ")
+                new_filter = getstring(stdscr, "filter for: ").lower()
                 if (new_filter != ""):
                     zlink.globalvars.filter = new_filter
                 if (zlink.globalvars.filter == ""):
@@ -862,6 +866,12 @@ class NoteBrowser():
                     zlink.globalvars.link_note.write()
                     zlink.globalvars.link_note = None
             elif (command == 'm'):
+                # TODO: moving a note down from the last position to reposition it back a the top ends up swapping the first and last item...
+                #       I think that's wrong, but it's not immediately clear what the desired behavior would be.  Would it just become the new first item
+                #       and force everything else to move down?  Or would it become the *second* item, because it would still technically be swapping
+                #       with the item below it, and we want to the current first item to stay first?  It seems like the more intuitive method would be to
+                #       treat the first and last items as connected, but also anchored to their respective positions in the list.  So moving the last item
+                #       'down' would move it to the number 2 slot, and moving the first item 'up' would move it to the max-1 spot.
                 if(zlink.globalvars.filter != ""):
                     continue
                 if (move is True):
@@ -927,17 +937,21 @@ class NoteBrowser():
             elif (command == "?"):
                 stdscr.clear()
                 stdscr.addstr("Editing Commands\n", curses.A_BOLD)
-                stdscr.addstr("a                - add a new note after the selected note\n")
-                stdscr.addstr("d or <del>       - delete the currently selected note\n")
-                stdscr.addstr("l                - will set the current note to the target and activate 'link' mode.  Navigating to any other")
-                stdscr.addstr("                   note and pressing 'l' (or <enter>) again will link the current note to the target note")
-                stdscr.addstr("m                - change to 'move' mode.  <up>/<down> will move the selected note. <esc> to cancel")
+                stdscr.addstr("A or O           - add a new note before the selected note.*\n")
+                stdscr.addstr("a or o           - add a new note after the selected note.*\n")
+                stdscr.addstr("d or <del>       - delete the currently selected note.*\n")
+                stdscr.addstr("l                - will set the current note to the target and activate 'link' mode.  Navigating to any other\n")
+                stdscr.addstr("                   note and pressing 'l' (or <enter>) again will link the current note to the target note.\n")
+                stdscr.addstr("m                - change to 'move' mode.  <up>/<down> will move the selected note. <esc> to cancel.*\n")
                 stdscr.addstr("q                - quit\n")
-                stdscr.addstr("/                - enter a string to search for\n")
                 stdscr.addstr("?                - this help screen\n")
 
                 stdscr.addstr("\n")
                 stdscr.addstr("Navigation Commands\n", curses.A_BOLD)
+                stdscr.addstr("F                - create a filter that limits visible notes to only those that match the entered string. <esc>\n")
+                stdscr.addstr("                   to cancel.\n")
+                stdscr.addstr("/                - enter a string and press <enter> to jump to the next matching record.  Uses the same \n")
+                stdscr.addstr("                   syntax as filter.\n")
                 stdscr.addstr("f                - open the file browser\n")
                 stdscr.addstr("<home>           - first note\n")
                 stdscr.addstr("<up>             - previous/next note\n")
@@ -946,7 +960,17 @@ class NoteBrowser():
                 stdscr.addstr("<down>           - next note\n")
                 stdscr.addstr("<end> or G       - last note\n")
                 stdscr.addstr("<enter>          - open the selected note (or turn off 'move' or 'link'  mode)\n")
-                stdscr.addstr("<esc>            - cancel 'move' mode, 'link' mode")
+                stdscr.addstr("<esc>            - cancel 'move' mode, 'link' mode, clear the current filter")
+                stdscr.addstr("\n")
+                stdscr.addstr("\n")
+                stdscr.addstr("* these commands do NOT work while a filter is engaged\n")
+                # NOTE: the problem is that all of these commands basically just walk through the list and do their things
+                #       based on what they find.  If that list is incomplete, a lot of things (like pruning links to deleted notes
+                #       or shuffling all of the existing notes to make room for a new one) won't happen for any of the filtered 
+                #       filtered results.  I need to make the global list some kind of dynamic object (rather than a simple array)
+                #       or add a flag to "loadnotes()" that can tell it to ignore global filter when it runs, and these commands can
+                #       all work on a local copy.  Or I can clear the filter, load the results, process them, and then put the filter
+                #       back... it's not hard, I'm just not going to do it now.
 
                 stdscr.addstr(curses.LINES-1,0,"Press any key to continue", curses.A_BOLD)
                 stdscr.refresh()
