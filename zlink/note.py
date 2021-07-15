@@ -41,9 +41,9 @@ class Note():
 
         self.parsed = self.parsefile()
 
+        self.backlinks = self.parselinks("backlinks")
         self.default = self.parsed['default']
         self.links = self.parselinks()
-        self.backlinks = self.parselinks("backlinks")
         self.references = self.parsereferences()
 
     def __str__(self):
@@ -335,6 +335,7 @@ class Note():
         for t in self.tags:
             m = re.search(search_string, t.lower())
             if (m): return True
+
         for l in self.default:
             m = re.search(search_string, l.lower())
             if (m): return True
@@ -342,13 +343,19 @@ class Note():
         for r in self.references:
             if (r.search(search_string) is True):
                 return True
+        return False
 
     # Change the order value of the current note.
     def updateorder(self, new_order):
         original_file = self.filename
         self.order = new_order
         self.filename = "{:04d} - {} - {}.md".format(self.order, self.id, self.title)
+        logging.debug(f"Moved {original_file} to {self.filename}")
         os.rename(original_file, self.filename)
+        files = loadnotes()
+        for f in files:
+            n = Note(f)
+            n.updatelinks(original_file, self.filename)
 
     def updatetags(self, new_tags):
         tags = new_tags.split(",")
@@ -386,7 +393,14 @@ class Note():
                     logging.debug('changing backlink from %s:"%s" to %s:"%s"', b.url, b.text, new_note.filename, new_note.title) 
                     b.url = new_note.filename
                     b.text = new_note.title
-        # TODO: References aren't getting updated, they go out of date as soon as a note changes position.
+
+        for r in self.references:
+            if (r.link == url):
+                if (new_url is None):
+                    self.references.remove(r);
+                else:
+                    r.link = new_url
+
         self.write()
         
     def view(self, stdscr):
@@ -511,7 +525,7 @@ class Note():
                 continue
             elif (command == "f"):
                 filebrowser.browse(stdscr)
-            elif (command == "l"):
+            elif (command == 'l'):
                 if (zlink.globalvars.link_note is None):
                     # store this note for linking later
                     zlink.globalvars.link_note = self
@@ -642,7 +656,6 @@ class Reference():
 
 class NoteBrowser():
     def browse(self, stdscr, filename=None):
-
         stdscr.clear()
 
         files = loadnotes()
@@ -704,11 +717,15 @@ class NoteBrowser():
                     if (i < top): continue
                     if (i > (top + curses.LINES - 2 )): continue
                     f = files[i]
-                    max_width = curses.COLS - 2
+                    max_width = curses.COLS - 6
+                    menu_item = "{:" + str(max_width) + "." + str(max_width) + "s}\n"
+                    note = Note(f)
+                    
+                    menu_item = menu_item.format(f)
                     if (i == selected):
-                        stdscr.addstr(("{:" + str(max_width) + "." + str(max_width) + "s}\n").format(f), curses.A_REVERSE)
+                        stdscr.addstr(menu_item, curses.A_REVERSE)
                     else:
-                        stdscr.addstr(("{:" + str(max_width) + "." + str(max_width) + "s}\n").format(f))
+                        stdscr.addstr(menu_item)
                 status = f"{selected+1} of {len(files)}"
 
             if (move):
@@ -724,20 +741,24 @@ class NoteBrowser():
             stdscr.refresh()
             command = stdscr.getkey()
 
-            if (command == "KEY_DOWN" or command == "KEY_RIGHT"):
-                original_selected = selected
-                selected += 1
-                if (selected > len(files)-1):
-                    selected = 0
-                if (move is True):
-                    files = swapnotes(files, original_selected, selected)
-            elif (command == "KEY_UP" or command == "KEY_LEFT"):
+            if (command == "KEY_UP"):
                 original_selected = selected
                 selected -= 1
                 if (selected < 0):
                     selected = len(files)-1
                 if (move is True):
                     files = swapnotes(files, original_selected,selected)
+            elif (command == "KEY_DOWN"):
+                original_selected = selected
+                selected += 1
+                if (selected > len(files)-1):
+                    selected = 0
+                if (move is True):
+                    files = swapnotes(files, original_selected, selected)
+            #elif (command == "KEY_LEFT"):
+            #    note = Note(files[selected])
+            #elif (command == "KEY_RIGHT"):
+            #    note = Note(files[selected])
             elif (command == "KEY_END" or command == "G"):
                 # TODO: Does pgup/pgdown/home/end have to kill the "move" command? or does
                 #   it make sense for me to be able to move a note a vast difference, rather than
@@ -762,47 +783,27 @@ class NoteBrowser():
                 selected -= curses.LINES - 2
                 if (selected < 0):
                     selected = 0
-            elif (command == "a" or command == "o"):
-                #TODO: Make an 'A'/'O' command that adds a new note *before* the current note.  (It's the exact same
-                #      code, it just starts with [current-1] rather than [current], I just don't feel like factoring
-                #      right now.
+            elif (command == 'a' or command == 'o'):
+                if (zlink.globalvars.filter != ""):
+                    continue
                 move = False
                 new_title = getstring(stdscr, "New Note: ", 80)
                 if (new_title == ""):
                     continue
-                # based on the selected note, figure out how many notes we have to adjust to make a hole
-                if (len(files) == 0):
-                    next_order = 1
-                elif (selected < len(files)-1):
-                    note = Note(files[selected+1])
-                    next_order = note.order + 1
-                    for f in files[selected:]:
-                        n = Note(f)
-                        if (n.order > next_order):
-                            break
-                        next_order = n.order + 1
-
-                    # now that we have the first free spot, move everything up one
-                    tmp_files = files[selected+1:]
-                    tmp_files.reverse()
-                    for f in tmp_files:
-                        n = Note(f)
-                        if (n.order < next_order):
-                            original_file = n.filename
-                            n.updateorder(next_order)
-                            files = loadnotes()
-                            for f2 in files:
-                                n2 = Note(f2)
-                                n2.updatelinks(original_file, n.filename)
-                            next_order -= 1
-                else:
-                    note = Note(files[-1])
-                    next_order = note.order + 1
-                today = datetime.datetime.now()
-                date = today.strftime("%Y-%m-%d %H-%M")
-                filename = "{:04d} - {} - {}.md".format(next_order, date, new_title)
-                new_note = Note(filename)
-                new_note.write()
+                new_order = makehole(files, selected+1)
+                new_note = newNote(new_order, new_title)
+                files = loadnotes()
+                note1 = new_note
+                selected = files.index(note1.filename)
+            elif (command == 'A' or command == 'O'):
+                if (zlink.globalvars.filter != ""):
+                    continue
+                move = False
+                new_title = getstring(stdscr, "New Note: ", 80)
+                if (new_title == ""):
+                    continue
+                new_order = makehole(files, selected-1)
+                new_note = newNote(new_order, new_title)
                 files = loadnotes()
                 note1 = new_note
                 selected = files.index(note1.filename)
@@ -823,6 +824,29 @@ class NoteBrowser():
             elif (command == "f"):
                 #f = FileBrowser()
                 filebrowser.browse(stdscr)
+            elif (command == 'F'):
+                original_selected = selected
+                note = Note(files[selected])
+                new_filter = getstring(stdscr, "filter for: ")
+                if (new_filter != ""):
+                    zlink.globalvars.filter = new_filter
+                if (zlink.globalvars.filter == ""):
+                    continue
+
+                move = False
+                zlink.globalvars.link_note = None
+                files = loadnotes()
+                if (len(files) == 0):
+                    zlink.globalvars.filter = ""
+                    files = loadnotes()
+                    selected = files.index(note.filename)
+                    status = f"{status} NOT FOUND"
+                    continue
+                try:
+                    selected = files.index(note.filename)
+                except ValueError:
+                    selected = 0
+
             elif (command == "l"):
                 move = False
                 note = Note(files[selected])
@@ -836,14 +860,18 @@ class NoteBrowser():
                     zlink.globalvars.link_note.addnotebacklink(note)
                     zlink.globalvars.link_note.write()
                     zlink.globalvars.link_note = None
-            elif (command == "m"):
+            elif (command == 'm'):
+                if(zlink.globalvars.filter != ""):
+                    continue
                 if (move is True):
                     move = False
                 else:
                     move = True
-            elif (command == "/"):
+                    zlink.globalvars.link_note = None
+            elif (command == '/'):
                 original_selected = selected
-                move = False
+                #move = False
+                #zlink.globalvars.link_note = None
                 new_search = getstring(stdscr, "Search for: ")
                 if (new_search != ""):
                     search = new_search
@@ -868,24 +896,33 @@ class NoteBrowser():
                 if (move is True or zlink.globalvars.link_note is not None):
                     # clear any 'special' modes.
                     move = False
-                    if (zlink.globalvars.link_note is not None):
-                        note = Note(files[selected])
-                        if (note is not None):
+                    note = Note(files[selected])
+                    if (note is not None):
+                        if (zlink.globalvars.link_note is not None):
                             # link the previous note to the current note
                             note.addnotelink(zlink.globalvars.link_note)
                             note.write()
                             zlink.globalvars.link_note.addnotebacklink(note)
                             zlink.globalvars.link_note.write()
-                        zlink.globalvars.link_note = None
+                            zlink.globalvars.link_note = None
                     continue
                     
                 note1 = Note(files[selected])
                 #selected = 0
                 #top = 0
-            elif (command == ""):
+            elif (command == ''):
                 # clear any 'special' modes.
-                move = False
-                zlink.globalvars.link_note = None
+                if (move == True or zlink.globalvars.link_note != None):
+                    move = False
+                    zlink.globalvars.link_note = None
+                elif (zlink.globalvars.filter != ""):
+                    zlink.globalvars.filter = ""
+                    f = files[selected]
+                    files = loadnotes()
+                    try:
+                        selected = files.index(f)
+                    except ValueError:
+                        selected = 0
             elif (command == "?"):
                 stdscr.clear()
                 stdscr.addstr("Editing Commands\n", curses.A_BOLD)
@@ -893,7 +930,7 @@ class NoteBrowser():
                 stdscr.addstr("d or <del>       - delete the currently selected note\n")
                 stdscr.addstr("l                - will set the current note to the target and activate 'link' mode.  Navigating to any other")
                 stdscr.addstr("                   note and pressing 'l' (or <enter>) again will link the current note to the target note")
-                stdscr.addstr("m                - change to 'move' mode.  <up>/<down> will move the selected note. <esc> to cancel\n")
+                stdscr.addstr("m                - change to 'move' mode.  <up>/<down> will move the selected note. <esc> to cancel")
                 stdscr.addstr("q                - quit\n")
                 stdscr.addstr("/                - enter a string to search for\n")
                 stdscr.addstr("?                - this help screen\n")
@@ -920,8 +957,8 @@ def gethole(files, position=0):
     if (len(files) == 0):
         next_order = 1
     elif (position < len(files)-1):
-        next_order = note.order + 1
         note = Note(files[position])
+        next_order = note.order + 1
         for f in files[position:]:
             n = Note(f)
             if (n.order > next_order):
@@ -948,24 +985,73 @@ def gettop(selected, current_top, maxlength, center=False):
 
 # Read the list of notes from the disk.
 def loadnotes():
-    files = [f for f in os.listdir(".") if(os.path.isfile(os.path.join(".", f)) and re.search("^\d+ - .+\.md$",f))]
+    files = []
+    for f in os.listdir("."):
+        if (os.path.isfile(os.path.join(".", f)) and re.search("^\d+ - .+\.md$",f)):
+            if (zlink.globalvars.filter != ""):
+                note = Note(f)
+                logging.debug("filtering for %s", zlink.globalvars.filter)
+                if (note.search(zlink.globalvars.filter) == False):
+                    continue
+                logging.debug("  found")
+            files.append(f)
+    #files = [f for f in os.listdir(".") if(os.path.isfile(os.path.join(".", f)) and re.search("^\d+ - .+\.md$",f))]
     files.sort()
     return files
 
+def makehole(files, position):
+    files = loadnotes()
+    note = Note(files[position])
+    hole = 1
+    if (position < 0):
+        position = 0
+    else:
+        if (position > len(files)):
+            position = len(files)
+        previous_note = Note(files[position-1])
+        hole = previous_note.order+1
+
+    last_order = hole
+    logging.debug(f"making a hole at {hole}({position})")
+    for i in range(position,len(files)):
+        logging.debug(f"evaluating postion {i}")
+        n = None
+        try:
+            n = Note(files[i])
+        except:
+            raise Exception(f"Can't open '{files[i]}'")
+
+        logging.debug(f"  {n.order}:{n.filename}")
+        if (n.order <= last_order):
+            original_file = n.filename
+            n.updateorder(last_order + 1)
+            #files[i] = n.filename
+            last_order = last_order + 1
+
+    files = loadnotes()
+    return hole
+
 def swapnotes(files, original_pos, new_pos):
     n1 = Note(files[original_pos])
-    n1_file = n1.filename
-
+    n1_order = n1.order
     n2 = Note(files[new_pos])
-    n2_file = n2.filename
-    new_order = n1.order
-    if (n2.order == n1.order and new_pos < original_pos):
-        new_order = gethole(files, new_pos)
-    n1.updateorder(n2.order)
-    n2.updateorder(new_order)
+    n2_order = n2.order
+    if (n2_order == n1_order):
+        if (new_pos < original_pos):
+            n2.updateorder(makehole(files, original_pos))
+        elif (new_pos > original_pos):
+            n1.updateorder(makehole(files, new_pos))
+    else:
+        n1.updateorder(n2_order)
+        n2.updateorder(n1_order)
     files = loadnotes()
-    for f in files:
-        note = Note(f)
-        note.updatelinks(n1_file, n1.filename)
-        note.updatelinks(n2_file, n2.filename)
     return files
+
+def newNote(order, title):
+    today = datetime.datetime.now()
+    date = today.strftime("%Y-%m-%d %H-%M")
+    filename = "{:04d} - {} - {}.md".format(order, date, title)
+    new_note = Note(filename)
+    new_note.write()
+    return new_note
+
