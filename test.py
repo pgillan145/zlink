@@ -80,7 +80,7 @@ class TestNote(unittest.TestCase):
         notes = zlink.note.loadnotes()
         self.assertEqual(zlink.note.Note(notes[0]).title, "TWO")
         self.assertEqual(zlink.note.Note(notes[1]).title, "THREE")
-        self.assertEqual(zlink.note.Note(notes[2]).order, 3)
+        self.assertEqual(zlink.note.Note(notes[2]).order, 5)
 
         # create a new note with an order/position that's already defined
         # (NOTE: should this be allowed? Maybe we should throw an error if you're creating
@@ -88,14 +88,14 @@ class TestNote(unittest.TestCase):
         note4 = zlink.note.newNote(3, "FOUR")
         notes = zlink.note.loadnotes()
         self.assertEqual(zlink.note.Note(notes[2]).order, 3)
-        self.assertEqual(zlink.note.Note(notes[3]).order, 3)
+        self.assertEqual(zlink.note.Note(notes[3]).order, 5)
         new_hole = zlink.note.makehole(notes, 2)
 
         # make sure makehole() fixes duplicate orders
         self.assertEqual(new_hole, 3)
         notes = zlink.note.loadnotes()
-        self.assertEqual(zlink.note.Note(notes[2]).order, 4)
-        self.assertEqual(zlink.note.Note(notes[3]).order, 5)
+        self.assertEqual(zlink.note.Note(notes[2]).order, 6)
+        self.assertEqual(zlink.note.Note(notes[3]).order, 7)
 
         # make sure delete() works
         note = zlink.note.Note(notes[1])
@@ -120,7 +120,7 @@ class TestNote(unittest.TestCase):
         self.assertEqual(test_note.linkcount(),1)
         # TODO: Verify there's a good reason for the link selection to be 1 based rather than 0 based
         #       like note selection.  I *think* I did that on purpose, but I have no idea why.
-        link = test_note.getlink(1)
+        link = test_note.getlinkfromselected(1)
         self.assertEqual(link.text, "TWO")
         self.assertTrue(re.search(" - TWO.md$", link.url))
         self.assertTrue(re.search("^0002 - ", link.url))
@@ -135,10 +135,10 @@ class TestNote(unittest.TestCase):
         test_note = zlink.note.Note(notes[0])
         self.assertEqual(test_note.title, "ONE")
         # NOTE: still confusing
-        link = test_note.getlink(1)
+        link = test_note.getlinkfromselected(1)
         self.assertEqual(link.text, "TWO")
         self.assertTrue(re.search(" - TWO.md$", link.url))
-        self.assertTrue(re.search("^0003 - ", link.url))
+        self.assertTrue(re.search("^0005 - ", link.url))
         self.assertTrue(re.sub("^0002 - ", "0003 - ", original_url), link.url)
     
     def test_004_filters(self):

@@ -60,17 +60,17 @@ def highlight(stdscr, select_y, select_x, mark_y, mark_x):
 
 def zl(stdscr):
     stdscr.clear()
+    files = zlink.note.loadnotes()
     n = zlink.note.NoteBrowser()
-    n.browse(stdscr)
+    n.browse(stdscr, filename = files[0])
 
 def main():
-    # I like 'vi', so that's the default editor.
     if ('EDITOR' not in os.environ):
+        # I like 'vi', so that's the default editor.
         os.environ.setdefault('EDITOR', 'vi')
 
     # Hitting escape bungs everything up for a second; this reduces the delay.
     os.environ.setdefault('ESCDELAY', '15')
-
 
     parser = argparse.ArgumentParser(description="Peruse and maintain a collection of Zettelkasten files in the current directory.")
     parser.add_argument('filename', nargs="?")
@@ -86,6 +86,7 @@ def main():
             raise ValueError('Invalid log level: %s' % loglevel)
         logging.basicConfig(format='%(asctime)s: %(message)s', datefmt='%m/%d/%Y %I:%M:%S %p', level=numeric_level, filename=zlink.globalvars.log_filename)
         logging.debug("-------")
+        logging.debug(f"log level: {zlink.globalvars.log_level}({numeric_level})")
     if (args.addlink is not None and args.filename is not None):
         # Don't look at anything, just create a link from one file to another.
         note1 = zlink.note.Note(args.filename)

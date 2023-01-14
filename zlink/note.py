@@ -22,13 +22,18 @@ class InvalidNoteException(Exception):
 
 class Link():
     def __init__(self, url, text=None):
-        self.url = url
-        if (text is None):
-            if (re.search("^\/", url)):
-                text = os.path.basename(url)
-            else:
-                text = url
-        self.text = text
+        m = re.search("\[(.+)\]\((.+)\)", url)
+        if (m):
+            self.text = m.group(1)
+            self.url = m.group(2)
+        else:
+            self.url = url
+            if (text is None):
+                if (re.search("^\/", url)):
+                    text = os.path.basename(url)
+                else:
+                    text = url
+            self.text = text
 
     def __str__(self):
         return f"[{self.text}]({self.url})"
@@ -139,16 +144,23 @@ class Note():
     def delete(self):
         os.remove(self.filename)
 
-    def deletelink(self, selected):
-        link = self.getlink(selected)
-        if (link is None):
-            return
-
+    def deletelink(self, link):
         try:
             self.links.remove(link)
         except ValueError:
             pass
 
+        new_note = Note(link.url)
+        logging.debug(f"looking at backlinks for {new_note.title}")
+        for b in list(new_note.backlinks):
+            logging.debug(f"b.text:{b.text} b.url:{b.url}")
+            if (b.url == self.filename):
+                logging.debug(f"deleting backlink to {self.title} from {new_note.title}")
+                try:
+                    new_note.backlinks.remove(b)
+                    new_note.write()
+                except ValueError:
+                    pass
         try:
             self.backlinks.remove(link)
         except ValueError:
@@ -160,11 +172,18 @@ class Note():
                     self.references.remove(r)
                 except ValueError:
                     pass
+        return
+
+    def deleteselectedlink(self, selected):
+        link = self.getlinkfromselected(selected)
+        if (link is None):
+            return
+        return self.deletelink(link)
 
     # Return a particular link.  This will return the links from reference
     #   objects, so if you're looking for this link later you need to dig into
     #   each item in the references array.
-    def getlink(self, selected):
+    def getlinkfromselected(self, selected):
         current = 1
         if (selected < 1 or selected > self.linkcount()):
             return
@@ -437,7 +456,6 @@ class Note():
             selected = self.cursesoutput(stdscr, top=top, selected=selected)
             #status = f"{file_index + 1} of {len(files)}"
 
-
             if (status is True and mark_x is not None):
                 status = f"{status} SELECTING END"
             elif (select is True):
@@ -456,10 +474,22 @@ class Note():
             command = stdscr.getkey()
 
             if (command == "KEY_DC" or command == ""):
-                confirm = getstring(stdscr, "Are you sure you want to delete this link? (y/N):", 1)
-                if (confirm == "y"):
-                    self.deletelink(selected)
-                    self.write()
+                if (self.linkcount() > 0):
+                    confirm = getstring(stdscr, "Are you sure you want to delete this link? (y/N):", 1)
+                    if (confirm == "y"):
+                        self.deleteselectedlink(selected)
+                        self.write()
+                else:
+                    original_file = self.filename
+                    confirm = getstring(stdscr, "Are you sure you want to delete this note? (y/N):", 1)
+                    if (confirm == "y"):
+                        self.delete()
+                        files = loadnotes()
+                        for f in files:
+                            note = Note(f)
+                            note.updatelinks(original_file, None)
+                        zlink.globalvars.reload = True
+                        return "NEXT"
             elif (command == "KEY_DOWN"):
                 if (select is True):
                     if (mark_y is not None):
@@ -508,6 +538,24 @@ class Note():
                             select_x += 1
                     continue
                 return "NEXT"
+            elif (command == 'a' or command == 'o'):
+                new_title = getstring(stdscr, "New Note: ", 80)
+                if (new_title == ""):
+                    continue
+                files = loadnotes()
+                new_order = makehole(files, files.index(self.filename) + 1)
+                new_note = newNote(new_order, new_title)
+                zlink.globalvars.reload = True
+                return new_note.filename
+            elif (command == 'A' or command == 'O'):
+                new_title = getstring(stdscr, "New Note: ", 80)
+                if (new_title == ""):
+                    continue
+                files = loadnotes()
+                new_order = makehole(files, files.index(self.filename))
+                new_note = newNote(new_order, new_title)
+                zlink.globalvars.reload = True
+                return new_note.filename
             elif (command == "c"):
                 # select text
                 if (select is False):
@@ -522,6 +570,17 @@ class Note():
                 else:
                     mark_y = select_y
                     mark_x = select_x
+            elif(command == "D"):
+                original_file = self.filename
+                confirm = getstring(stdscr, "Are you sure you want to delete this note? (y/N):", 1)
+                if (confirm == "y"):
+                    self.delete()
+                    files = loadnotes()
+                    for f in files:
+                        note = Note(f)
+                        note.updatelinks(original_file, None)
+                zlink.globalvars.reload = True
+                return "NEXT"
             elif (command == "e"):
                 # Edit note
                 curses.def_prog_mode()
@@ -579,7 +638,7 @@ class Note():
                         mark_y = select_y
                         mark_x = select_x
                 else:
-                    link = self.getlink(selected)
+                    link = self.getlinkfromselected(selected)
                     if (link is not None and not re.search("^[^ ]+:", link.url)):
                         try:
                             n = Note(link.url)
@@ -595,7 +654,7 @@ class Note():
                             return n.filename
                     elif (link is not None and re.search("^[^ ]+:", link.url)):
                         subprocess.run(['open', link.url], check=True)
-            elif (command == ''):
+            elif (command == 'KEY_ESCAPE' or command == ''):
                 if (select is True):
                     if (mark_x is not None):
                         mark_x = None
@@ -603,22 +662,24 @@ class Note():
                     else:
                         select = False
                     continue
-
-                return
+                #return
             elif (command == "?"):
                 # TODO: If the window is smaller than the help text, the thing crashes.
                 stdscr.clear()
                 stdscr.addstr("Editing Commands\n\n", curses.A_BOLD)
+                stdscr.addstr(" a              - create a new note after the current note\n")
                 stdscr.addstr(" c              - enter selection mode to copy text to save the clipboard as a reference\n")
+                stdscr.addstr(" D              - delete the current note\n")
                 stdscr.addstr(" e              - open this note in the external editor (set the EDITOR environment variable)\n")
                 stdscr.addstr(" l              - press once to set this note as the target.  Navigate to another note and press\n")
-                stdscr.addstr("                  'l' again to add a link to the target note to the current note\n")
+                stdscr.addstr("                  'l' again to add a link to the target note to the current note, or <esc> to\n")
+                stdscr.addstr("                  exit link mode.\n")
                 stdscr.addstr(" p              - paste a reference from the clipboard to the current note\n")
                 stdscr.addstr(" q              - quit\n")
                 stdscr.addstr(" r              - rename note\n")
                 stdscr.addstr(" t              - edit tags\n")
-                stdscr.addstr(" <del> or       - delete the currently selected link or backlink\n")
-                stdscr.addstr(" <backspace>\n")
+                stdscr.addstr(" <del> or       - delete the currently selected link or backlink.  If all links have been deleted,\n")
+                stdscr.addstr(" <backspace>      will delete the entire note.\n")
                 stdscr.addstr(" ?              - this help screen\n")
                 stdscr.addstr("\n")
                 stdscr.addstr("Selection Mode Commands\n\n", curses.A_BOLD)
@@ -633,7 +694,7 @@ class Note():
                 stdscr.addstr(" <enter>        - follow the selected link\n")
                 stdscr.addstr(" <left>         - previous note\n")
                 stdscr.addstr(" <right>        - next note\n")
-                stdscr.addstr(" <esc>          - return to note list\n")
+                #stdscr.addstr(" <esc>          - return to note list\n")
 
                 stdscr.addstr(curses.LINES-1,0,"Press any key to continue", curses.A_BOLD)
                 stdscr.refresh()
@@ -1018,8 +1079,8 @@ def gettop(selected, current_top, maxlength, center=False):
         top = maxlength - curses.LINES + 2
     return top
 
-# Read the list of notes from the disk.
 def loadnotes():
+    """Read the list of notes from the disk."""
     files = []
     for f in os.listdir("."):
         if (os.path.isfile(os.path.join(".", f)) and re.search("^\d+ - .+\.md$",f)):
@@ -1036,17 +1097,20 @@ def loadnotes():
 
 def makehole(files, position):
     files = loadnotes()
-    note = Note(files[position])
     hole = 1
     if (position < 0):
         position = 0
-    else:
-        if (position > len(files)):
-            position = len(files)
+
+    if (position > len(files)):
+        position = len(files)
+
+    if (position > 0):
         previous_note = Note(files[position-1])
         hole = previous_note.order+1
 
-    last_order = hole
+    # TODO: This moves everything up one, until there's no note where order == position.  However, while it's doing it's thing, each note that's getting moved
+    #   temporarily has the same order as the note after it... I think. To be honest, the logic kind of eludes me.  I should probably 
+    last_order = hole + 2
     logging.debug(f"making a hole at {hole}({position})")
     for i in range(position,len(files)):
         logging.debug(f"evaluating postion {i}")
@@ -1059,11 +1123,11 @@ def makehole(files, position):
         logging.debug(f"  {n.order}:{n.filename}")
         if (n.order <= last_order):
             original_file = n.filename
-            n.updateorder(last_order + 1)
-            #files[i] = n.filename
             last_order = last_order + 1
+            n.updateorder(last_order)
+        else:
+            break
 
-    files = loadnotes()
     return hole
 
 def swapnotes(files, original_pos, new_pos):
