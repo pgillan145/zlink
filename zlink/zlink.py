@@ -9,6 +9,8 @@ import sys
 
 import zlink.note
 
+logger = logging.getLogger(__name__)
+
 def highlight(stdscr, select_y, select_x, mark_y, mark_x):
     selected = ""
     if (mark_y is not None and mark_x is not None):
@@ -85,8 +87,8 @@ def main():
         if not isinstance(numeric_level, int):
             raise ValueError('Invalid log level: %s' % loglevel)
         logging.basicConfig(format='%(asctime)s: %(message)s', datefmt='%m/%d/%Y %I:%M:%S %p', level=numeric_level, filename=zlink.globalvars.log_filename)
-        logging.debug("-------")
-        logging.debug(f"log level: {zlink.globalvars.log_level}({numeric_level})")
+        logger.debug("-------")
+        logger.debug(f"log level: {zlink.globalvars.log_level}({numeric_level})")
     if (args.addlink is not None and args.filename is not None):
         # Don't look at anything, just create a link from one file to another.
         note1 = zlink.note.Note(args.filename)

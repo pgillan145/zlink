@@ -8,6 +8,7 @@ import os.path
 import re
 import subprocess
 import sys
+import yaml
 
 from minorimpact.curses import getstring, highlight
 
@@ -15,6 +16,8 @@ import zlink
 import zlink.globalvars
 
 from zlink.file import FileBrowser, File
+
+logger = logging.getLogger(__name__)
 
 class InvalidNoteException(Exception):
     def __init__(self, message):
@@ -35,14 +38,51 @@ class Link():
                     text = url
             self.text = text
 
+        self.url = re.sub(' ', '%20', self.url);
+
     def __str__(self):
+        if (zlink.globalvars.wikilinks == True):
+            return f'[[{self.url}|{self.text}]]'
+
         return f"[{self.text}]({self.url})"
+
+    def equals(self, testurl):
+        ptesturl = None
+        if (isinstance(testurl, Link)):
+            ptesturl = testurl.url
+        else:
+            ptesturl = re.sub(' ', '%20', testurl)
+
+        if (self.url == testurl or self.url == ptesturl):
+            return True
+
+        return False
+
+    def output(self):
+        output = []
+
+        if (self.text is not None):
+            output.append(self.text)
+        else:
+            output.append(re.sub('%20', ' ', self.url))
+
+        return output
+
+    def settext(self, text):
+        self.text = text
+
+    def seturl(self, url):
+        purl = re.sub(' ', '%20', url)
+        self.url = purl
 
 class Note():
     def __init__(self, filename):
+        filename = re.sub('%20', ' ', filename)
+
         self.filename = filename
         self.order, self.id, self.title = self.parseurl()
-        self.tags = []
+        self.frontmatter = {'tags':[]}
+        #self.tags = []
 
         self.parsed = self.parsefile()
 
@@ -53,10 +93,14 @@ class Note():
 
     def __str__(self):
         str = ""
-        #if (self.id is not None):
-        #    str = str + f"[_metadata_:id]:- {self.id}\n"
-        if (len(self.tags) > 0):
-            str = str + f'[_metadata_:tags]:- "' + ','.join(self.tags) + '"\n'
+
+        if (len(self.frontmatter) > 0):
+            str = str + '---\n'
+            #for key in self.frontmatter.keys():
+            #    value = self.frontmatter[key]
+            #    str = str + f"{key}: {value}\n"
+            str = str + yaml.dump(self.frontmatter) + '\n'
+            str = str + '---\n'
 
         if (len(str) > 0): str = str + "\n"
         for i in self.default:
@@ -67,12 +111,12 @@ class Note():
         for i in self.links:
             str = f"{str}{i}\n"
         str = str + "\n"
-                
+
         str = str + "### Backlinks\n"
         for i in self.backlinks:
             str = f"{str}{i}\n"
         str = str + "\n"
-                
+
         str = str + "### References\n"
         for i in self.references:
             str = f"{str}{i}\n\n"
@@ -104,10 +148,10 @@ class Note():
 
         header = f"{self.title}"
         stdscr.addstr( f"{header}\n", curses.A_BOLD)
-                
+
         for i in range(0, len(output)):
             s = output[i]
- 
+
             current = 0
             m = re.search("^__(\d+)__", s)
             if (m):
@@ -123,7 +167,7 @@ class Note():
 
         for i in range(0, len(output)):
             s = output[i]
- 
+
             current = 0
             attr = 0
             if (re.match("^__REVERSE__", s)):
@@ -151,11 +195,11 @@ class Note():
             pass
 
         new_note = Note(link.url)
-        logging.debug(f"looking at backlinks for {new_note.title}")
+        logger.debug(f"looking at backlinks for {new_note.title}")
         for b in list(new_note.backlinks):
-            logging.debug(f"b.text:{b.text} b.url:{b.url}")
+            logger.debug(f"b.text:{b.text} b.url:{b.url}")
             if (b.url == self.filename):
-                logging.debug(f"deleting backlink to {self.title} from {new_note.title}")
+                logger.debug(f"deleting backlink to {self.title} from {new_note.title}")
                 try:
                     new_note.backlinks.remove(b)
                     new_note.write()
@@ -191,7 +235,7 @@ class Note():
             if (selected == current):
                 return i
             current += 1
-                
+
         for i in self.backlinks:
             if (selected == current):
                 return i
@@ -213,12 +257,15 @@ class Note():
         output = []
         current = 0
 
-        if (len(self.tags) > 0):
-            output.append(f"tags: #" + ",#".join(self.tags) + "")
+        logger.debug(f"output('{self.filename}')")
+        logger.debug(f"frontmatter:{self.frontmatter}")
+        if (len(self.frontmatter['tags']) > 0):
+            output.append(f"tags: #" + ",#".join(self.frontmatter['tags']) + "")
             output.append("")
 
-        if (len(self.tags) > 0 or self.id is not None): 
+        if (len(self.frontmatter['tags']) > 0 or self.id is not None):
             output.append("")
+
         for i in self.default:
             if (i):
                 foo = []
@@ -230,35 +277,45 @@ class Note():
         output.append("### Links")
         for i in self.links:
             current += 1
-            output.append(f"__{current}__{i.text}")
+            for l in i.output():
+                output.append(f"__{current}__{l}")
         output.append("")
 
         output.append("### Backlinks")
         for i in self.backlinks:
             current += 1
-            output.append(f"__{current}__{i.text}")
+            for l in i.output():
+                output.append(f"__{current}__{l}")
         output.append("")
 
         output.append("### References")
         for i in self.references:
             current += 1
-            output.append(f"__{current}__{i.link}")
+            ln = 1
+            for l in i.output():
+                if (ln == 1):
+                    output.append(f"__{current}__{l}")
+                else:
+                    output.append(f"{l}")
+                ln = ln + 1
 
-            if (i.text is not None):
-                foo = minorimpact.splitstringlen(i.text,curses.COLS - 2)
-                for f in foo:
-                    output.append(f"> {f}")
             output.append("")
         return output
 
     def parsefile(self):
         lines = {}
+        infrontmatter = 0
+
+        logger.debug(f"parsefile({self.filename})")
+
         try:
             with open(self.filename, "r") as f:
                 lines = [line.rstrip() for line in f]
         except FileNotFoundError:
             pass
-        data = {"default": [] }
+
+        old_tags = []
+        data = {"default": [], "frontmatter":[]}
         section = "default"
         for l in lines:
             # collect metadata
@@ -266,12 +323,17 @@ class Note():
             if (m):
                 key = m.group(1)
                 value = m.group(2)
-                if (key == "id"): 
+                if (key == "id"):
                     #self.id = value
                     pass
                 elif (key == "tags"):
                     for tag in value.split(","):
-                        self.tags.append(tag.strip())
+                        old_tags.append(tag.strip())
+                continue
+
+            m = re.search('^---$', l)
+            if (m and infrontmatter < 2):
+                infrontmatter = infrontmatter + 1
                 continue
 
             m = re.search("^#+ (.+)$", l)
@@ -285,13 +347,32 @@ class Note():
             if len(data[section]) == 0 and len(l) == 0:
                 continue
 
+            if (infrontmatter == 1):
+                data['frontmatter'].append(l)
+                continue
+
             data[section].append(l)
-           
+
+
+        if (len(data['frontmatter']) > 0):
+            frontmatter = '\n'.join(data['frontmatter'])
+            logger.debug(frontmatter)
+            self.frontmatter = yaml.safe_load(frontmatter)
+            logger.debug(self.frontmatter)
+
+            if ("tags" not in self.frontmatter):
+                self.frontmatter['tags'] = []
+
+        if (len(old_tags) > 0):
+            for t in old_tags:
+                self.frontmatter['tags'].append(t)
+
         # get rid of trailing blank lines
         for section in data:
             if (len(data[section]) > 0):
                 while len(data[section][-1]) == 0:
                     data[section].pop(-1)
+
         return data
 
     def parselinks(self, section="links"):
@@ -302,7 +383,15 @@ class Note():
         for l in self.parsed[section]:
             m = re.search("\[(.+)\]\((.+)\)", l)
             if (m):
-                data.append(Link(m.group(2),m.group(1)))
+                text = m.group(1)
+                #url = re.sub('%20',' ', m.group(2))
+                url = m.group(2)
+                data.append(Link(url, text))
+            else:
+                m = re.search("\[\[(.+)\]\]", l)
+                if (m):
+                    url,text = m.group(1).split('|')
+                    data.append(Link(url, text))
         return data
 
     def parsereferences(self, section="references"):
@@ -325,7 +414,7 @@ class Note():
             m = re.search("^> (.+)$", l)
             if (m):
                 text = m.group(1)
-            
+
         if (link):
             data.append(Reference(link, text))
         return data
@@ -354,7 +443,7 @@ class Note():
         if (m): return True
         m = re.search(search_string, self.id.lower())
         if (m): return True
-        for t in self.tags:
+        for t in self.frontmatter['tags']:
             m = re.search(search_string, t.lower())
             if (m): return True
 
@@ -372,7 +461,7 @@ class Note():
         original_file = self.filename
         self.order = new_order
         self.filename = "{:04d} - {} - {}.md".format(self.order, self.id, self.title)
-        logging.debug(f"Moved {original_file} to {self.filename}")
+        logger.debug(f"Moved {original_file} to {self.filename}")
         os.rename(original_file, self.filename)
         files = loadnotes()
         for f in files:
@@ -383,11 +472,11 @@ class Note():
         tags = new_tags.split(",")
         for i,t in enumerate(tags):
             tags[i] = t.strip()
-        self.tags = tags
+        self.frontmatter['tags'] = tags
         self.write()
 
     def updatetitle(self, new_title):
-        # TODO: Should this just use the write() method?  Does that method know how handle changes that would result in an 
+        # TODO: Should this just use the write() method?  Does that method know how handle changes that would result in an
         #       altered filename?  If it doesn't, it really, really should.
         original_file = self.filename
         self.title = new_title
@@ -402,22 +491,22 @@ class Note():
             new_note = Note(new_url)
 
         for l in self.links:
-            if (l.url == url):
+            if (l.equals(url)):
                 if (new_note is None):
                     self.links.remove(l)
                 else:
-                    logging.debug('changing link from %s:"%s" to %s:"%s"', l.url, l.text, new_note.filename, new_note.title) 
-                    l.url = new_note.filename
-                    l.text = new_note.title
-                
+                    logger.debug('changing link from %s:"%s" to %s:"%s"', l.url, l.text, new_note.filename, new_note.title)
+                    l.seturl(new_note.filename)
+                    l.settext(new_note.title)
+
         for b in self.backlinks:
-            if (b.url == url):
+            if (b.equals(url)):
                 if (new_note is None):
                     self.backlinks.remove(b)
                 else:
-                    logging.debug('changing backlink from %s:"%s" to %s:"%s"', b.url, b.text, new_note.filename, new_note.title) 
-                    b.url = new_note.filename
-                    b.text = new_note.title
+                    logger.debug('changing backlink from %s:"%s" to %s:"%s"', b.url, b.text, new_note.filename, new_note.title)
+                    b.seturl(new_note.filename)
+                    b.settext(new_note.title)
 
         for r in self.references:
             if (r.link == url):
@@ -427,7 +516,7 @@ class Note():
                     r.link = new_url
 
         self.write()
-        
+
     def view(self, stdscr):
         newnote = None
         stdscr.clear()
@@ -450,7 +539,7 @@ class Note():
 
             status = ""
             # TODO: Figure out if we really need to have selected passed back to us.  It had
-            #   something to do with having it set to zero (no link selected), and then having the 
+            #   something to do with having it set to zero (no link selected), and then having the
             #   function reset it to '1' so a link is always accepted, but that might not be
             #   needed now that browsing and viewing aren't sharing a loop.
             selected = self.cursesoutput(stdscr, top=top, selected=selected)
@@ -462,7 +551,7 @@ class Note():
                 status = f"{status} SELECTING START"
 
             if (status):
-                # Make sure a long status doesn't push 
+                # Make sure a long status doesn't push
                 status = minorimpact.splitstringlen(status, curses.COLS-2)[0]
                 stdscr.addstr(curses.LINES-1,0,status, curses.A_BOLD)
 
@@ -702,9 +791,9 @@ class Note():
 
     def write(self):
         # TODO: Make this compare the filename in the object with the filename that would be generated from the object
-        #       data, and if they don't match, you know... fucking fix it.  This shouldn't be happening in updateTitle() or 
+        #       data, and if they don't match, you know... fucking fix it.  This shouldn't be happening in updateTitle() or
         #       updateOrder().
-        # NOTE: I think i may have looked into this before, but see if there's a way for an object to detect changes to itself and 
+        # NOTE: I think i may have looked into this before, but see if there's a way for an object to detect changes to itself and
         #       perform actions if something is different.  That could be a thing, right?
         with open(self.filename, "w") as f:
             f.write(self.__str__())
@@ -720,6 +809,13 @@ class Reference():
         if (self.text is not None):
             str = str + f"\n> {self.text}"
         return str
+
+    def output(self):
+        output = []
+        output.extend(self.link.output())
+        if (self.text is not None):
+            output.append(f"> {self.text}")
+        return output
 
     def search(self, search_string):
         if (self.text is not None):
@@ -792,7 +888,7 @@ class NoteBrowser():
                     max_width = curses.COLS - 6
                     menu_item = "{:" + str(max_width) + "." + str(max_width) + "s}\n"
                     note = Note(f)
-                    
+
                     menu_item = menu_item.format(f)
                     if (i == selected):
                         stdscr.addstr(menu_item, curses.A_REVERSE)
@@ -808,7 +904,7 @@ class NoteBrowser():
                 status = f"{status} FILTERED:'{zlink.globalvars.filter}'"
 
             if (status):
-                # Make sure a long status doesn't push 
+                # Make sure a long status doesn't push
                 status = minorimpact.splitstringlen(status, curses.COLS-2)[0]
                 stdscr.addstr(curses.LINES-1,0,status, curses.A_BOLD)
 
@@ -836,7 +932,7 @@ class NoteBrowser():
             elif (command == "KEY_END" or command == "G"):
                 # TODO: Does pgup/pgdown/home/end have to kill the "move" command? or does
                 #   it make sense for me to be able to move a note a vast difference, rather than
-                #   forcing it to be one at a time.  
+                #   forcing it to be one at a time.
                 #   Pro: it's faster to move a note a long distance
                 #   Con: if the user accidentally moves it a long distance, it's going to be hard to get it
                 #     back into the correct place.  If there are a ton of notes, shuffling them all could
@@ -849,7 +945,7 @@ class NoteBrowser():
                 selected = 0
             elif (command == "KEY_NPAGE" or command == ""):
                 move = False
-                selected += curses.LINES - 2  
+                selected += curses.LINES - 2
                 if (selected > len(files) - 1):
                     selected = len(files) - 1
             elif (command == "KEY_PPAGE" or command == ""):
@@ -988,7 +1084,7 @@ class NoteBrowser():
                             zlink.globalvars.link_note.write()
                             zlink.globalvars.link_note = None
                     continue
-                    
+
                 note1 = Note(files[selected])
                 #selected = 0
                 #top = 0
@@ -1037,7 +1133,7 @@ class NoteBrowser():
                 stdscr.addstr("* these commands do NOT work while a filter is engaged\n")
                 # NOTE: the problem is that all of these commands basically just walk through the list and do their things
                 #       based on what they find.  If that list is incomplete, a lot of things (like pruning links to deleted notes
-                #       or shuffling all of the existing notes to make room for a new one) won't happen for any of the filtered 
+                #       or shuffling all of the existing notes to make room for a new one) won't happen for any of the filtered
                 #       filtered results.  I need to make the global list some kind of dynamic object (rather than a simple array)
                 #       or add a flag to "loadnotes()" that can tell it to ignore global filter when it runs, and these commands can
                 #       all work on a local copy.  Or I can clear the filter, load the results, process them, and then put the filter
@@ -1086,10 +1182,10 @@ def loadnotes():
         if (os.path.isfile(os.path.join(".", f)) and re.search("^\d+ - .+\.md$",f)):
             if (zlink.globalvars.filter != ""):
                 note = Note(f)
-                logging.debug("filtering for %s", zlink.globalvars.filter)
+                logger.debug("filtering for %s", zlink.globalvars.filter)
                 if (note.search(zlink.globalvars.filter) == False):
                     continue
-                logging.debug("  found")
+                logger.debug("  found")
             files.append(f)
     #files = [f for f in os.listdir(".") if(os.path.isfile(os.path.join(".", f)) and re.search("^\d+ - .+\.md$",f))]
     files.sort()
@@ -1109,18 +1205,18 @@ def makehole(files, position):
         hole = previous_note.order+1
 
     # TODO: This moves everything up one, until there's no note where order == position.  However, while it's doing it's thing, each note that's getting moved
-    #   temporarily has the same order as the note after it... I think. To be honest, the logic kind of eludes me.  I should probably 
+    #   temporarily has the same order as the note after it... I think. To be honest, the logic kind of eludes me.  I should probably
     last_order = hole + 2
-    logging.debug(f"making a hole at {hole}({position})")
+    logger.debug(f"making a hole at {hole}({position})")
     for i in range(position,len(files)):
-        logging.debug(f"evaluating postion {i}")
+        logger.debug(f"evaluating postion {i}")
         n = None
         try:
             n = Note(files[i])
         except:
             raise Exception(f"Can't open '{files[i]}'")
 
-        logging.debug(f"  {n.order}:{n.filename}")
+        logger.debug(f"  {n.order}:{n.filename}")
         if (n.order <= last_order):
             original_file = n.filename
             last_order = last_order + 1

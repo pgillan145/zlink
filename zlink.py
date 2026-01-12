@@ -3,4 +3,4 @@
 import zlink.zlink
 
 if __name__ == "__main__":
-    zlink.zlink.main()
+    zlink.main()
